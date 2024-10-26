@@ -1,14 +1,17 @@
 <script lang="ts">
+    import { privateKeyToPublicKey } from "../../utils/account_utils";
     let showPopup = false;
     let privateKeyOrPath = "";
-    let publicKey = "";
+    let accountName = "";
+    let publicKey: string | null = "";
 
     function togglePopup() {
         showPopup = !showPopup;
     }
 
-    function previewPublicKey() {
-        publicKey = privateKeyOrPath.toUpperCase();
+    async function previewPublicKey() {
+        const publicKeyResolved = await privateKeyToPublicKey(privateKeyOrPath);
+        publicKey = publicKeyResolved ? publicKeyResolved.toBase58() : null;
     }
 
     function handleSubmit() {
@@ -32,13 +35,18 @@
             <h2>Import Account</h2>
             <form on:submit|preventDefault={handleSubmit}>
                 <textarea
+                    bind:value={accountName}
+                    placeholder="Your account name"
+                    rows="1"
+                ></textarea>
+                <textarea
                     bind:value={privateKeyOrPath}
                     placeholder="Paste your private key or path to private key here"
                     rows="2"
                     on:input={previewPublicKey}
                 ></textarea>
                 <div class="readonly-textarea">
-                    {`Public key: ${publicKey}`}
+                    {publicKey ? `Public key: ${publicKey}` : "Provided secret key is not valid"}
                 </div>
                 <div class="button-group">
                     <button type="button" on:click={togglePopup}>Cancel</button>
