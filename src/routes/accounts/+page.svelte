@@ -7,6 +7,7 @@
     let showPopup = false;
     let privateKeyOrPath = "";
     let accountName = "";
+    let accountDescription = "";
     let publicKey: string | null = "";
     let accounts: Account[] = [];
 
@@ -38,13 +39,18 @@
     }
 
     async function handleSubmit() {
-        console.log("Importing account:", { accountName, privateKeyOrPath });
+        console.log("Importing account:", { accountName, privateKeyOrPath, accountDescription });
         try {
-            await invoke("import_account", { accountName, privateKey: privateKeyOrPath });
+            await invoke("import_account", {
+                accountName,
+                privateKey: privateKeyOrPath,
+                description: accountDescription,
+            });
             await loadAccounts();
             showPopup = false;
             privateKeyOrPath = "";
             accountName = "";
+            accountDescription = "";
         } catch (error) {
             console.error("Error importing account:", error);
         }
@@ -156,22 +162,46 @@
         <div class="popup-content">
             <h2>Import Account</h2>
             <form on:submit|preventDefault={handleSubmit}>
-                <textarea bind:value={accountName} placeholder="Your account name" rows="1"
-                ></textarea>
-                <textarea
-                    bind:value={privateKeyOrPath}
-                    placeholder="Paste your private key or path to private key here"
-                    rows="2"
-                    on:input={previewPublicKey}
-                ></textarea>
+                <div class="form-group">
+                    <label for="account-name">Account Name</label>
+                    <textarea
+                        id="account-name"
+                        bind:value={accountName}
+                        placeholder="Enter account name"
+                        rows="1"
+                    ></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="private-key">Private Key</label>
+                    <textarea
+                        id="private-key"
+                        bind:value={privateKeyOrPath}
+                        placeholder="Paste your private key or path to private key here"
+                        rows="2"
+                        on:input={previewPublicKey}
+                    ></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description (optional)</label>
+                    <textarea
+                        id="description"
+                        bind:value={accountDescription}
+                        placeholder="Enter account description"
+                        rows="2"
+                    ></textarea>
+                </div>
+
                 <div class="readonly-textarea">
                     {publicKey ? `Public key: ${publicKey}` : "Provided secret key is not valid"}
                 </div>
+
                 <div class="button-group">
-                    <button type="button" class="popup-button cancel-button" on:click={togglePopup}
-                        >Cancel</button
-                    >
-                    <button type="submit" class="popup-button submit-button">Submit</button>
+                    <button type="button" class="popup-button cancel-button" on:click={togglePopup}>
+                        Cancel
+                    </button>
+                    <button type="submit" class="popup-button submit-button"> Submit </button>
                 </div>
             </form>
         </div>
@@ -591,6 +621,59 @@
         .popup-content {
             background-color: #2f2f2f;
             color: #f6f6f6;
+        }
+    }
+
+    .form-group {
+        margin-bottom: 16px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: #333;
+    }
+
+    textarea {
+        width: 100%;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+        font-family: inherit;
+        font-size: 1em;
+        box-sizing: border-box;
+        resize: vertical;
+    }
+
+    .readonly-textarea {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 20px;
+        font-size: 0.875em;
+        color: #666;
+        background-color: #f5f5f5;
+        border-radius: 8px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .form-group label {
+            color: #f0f0f0;
+        }
+
+        textarea {
+            background-color: #1f1f1f;
+            color: #f6f6f6;
+            border-color: #444;
+        }
+
+        textarea::placeholder {
+            color: #888;
+        }
+
+        .readonly-textarea {
+            background-color: #2f2f2f;
+            color: #bbb;
         }
     }
 </style>
