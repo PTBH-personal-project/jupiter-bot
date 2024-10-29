@@ -12,16 +12,16 @@
 
     async function loadAccounts() {
         try {
-            console.log('Start loading accounts...');
+            console.log("Start loading accounts...");
             accounts = await invoke("get_accounts");
-            console.log('Loaded accounts:', accounts);
+            console.log("Loaded accounts:", accounts);
         } catch (error) {
-            console.error('Error loading accounts:', error);
+            console.error("Error loading accounts:", error);
         }
     }
 
     onMount(async () => {
-        console.log('Start onMount');
+        console.log("Start onMount");
         await loadAccounts();
     });
 
@@ -43,7 +43,7 @@
             privateKeyOrPath = "";
             accountName = "";
         } catch (error) {
-            console.error('Error importing account:', error);
+            console.error("Error importing account:", error);
         }
     }
 </script>
@@ -78,7 +78,7 @@
                             <td class="key-cell" title={account.private_key}>
                                 {account.private_key.slice(0, 8)}...{account.private_key.slice(-8)}
                             </td>
-                            <td>{account.description || '-'}</td>
+                            <td>{account.description || "-"}</td>
                             <td>
                                 <span class="status-badge status-{account.status.toLowerCase()}">
                                     {account.status}
@@ -99,10 +99,7 @@
         <div class="popup-content">
             <h2>Import Account</h2>
             <form on:submit|preventDefault={handleSubmit}>
-                <textarea
-                    bind:value={accountName}
-                    placeholder="Your account name"
-                    rows="1"
+                <textarea bind:value={accountName} placeholder="Your account name" rows="1"
                 ></textarea>
                 <textarea
                     bind:value={privateKeyOrPath}
@@ -114,7 +111,9 @@
                     {publicKey ? `Public key: ${publicKey}` : "Provided secret key is not valid"}
                 </div>
                 <div class="button-group">
-                    <button type="button" class="popup-button cancel-button" on:click={togglePopup}>Cancel</button>
+                    <button type="button" class="popup-button cancel-button" on:click={togglePopup}
+                        >Cancel</button
+                    >
                     <button type="submit" class="popup-button submit-button">Submit</button>
                 </div>
             </form>
@@ -174,7 +173,8 @@
         min-width: 800px;
     }
 
-    th, td {
+    th,
+    td {
         padding: 12px;
         text-align: left;
         border-bottom: 1px solid #ddd;
