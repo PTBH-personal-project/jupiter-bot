@@ -46,6 +46,17 @@
             console.error("Error importing account:", error);
         }
     }
+
+    async function deleteAccount(id: number) {
+        if (confirm("Are you sure you want to delete this account?")) {
+            try {
+                await invoke("delete_account", { id });
+                await loadAccounts(); // Reload the list after deletion
+            } catch (error) {
+                console.error("Error deleting account:", error);
+            }
+        }
+    }
 </script>
 
 <div class="accounts-container">
@@ -65,6 +76,7 @@
                         <th>Private Key</th>
                         <th>Description</th>
                         <th>Status</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -83,6 +95,31 @@
                                 <span class="status-badge status-{account.status.toLowerCase()}">
                                     {account.status}
                                 </span>
+                            </td>
+                            <td>
+                                <div class="tooltip-container">
+                                    <button
+                                        class="delete-button"
+                                        on:click={() => deleteAccount(account.id)}
+                                    >
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="16"
+                                            height="16"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        >
+                                            <circle cx="12" cy="12" r="10" />
+                                            <line x1="15" y1="9" x2="9" y2="15" />
+                                            <line x1="9" y1="9" x2="15" y2="15" />
+                                        </svg>
+                                    </button>
+                                    <span class="tooltip">Delete Account</span>
+                                </div>
                             </td>
                         </tr>
                     {/each}
@@ -360,6 +397,95 @@
 
         .cancel-button:active {
             background-color: #2f2f2f;
+        }
+    }
+
+    .delete-button {
+        background: none;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        color: #666;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .delete-button:hover {
+        color: #dc3545;
+        background-color: rgba(220, 53, 69, 0.1);
+    }
+
+    .delete-button:active {
+        transform: scale(0.95);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .delete-button {
+            color: #999;
+        }
+
+        .delete-button:hover {
+            color: #ff4d4d;
+            background-color: rgba(255, 77, 77, 0.1);
+        }
+    }
+
+    .tooltip-container {
+        position: relative;
+        display: inline-block;
+    }
+
+    .tooltip {
+        visibility: hidden;
+        position: absolute;
+        background-color: #333;
+        color: white;
+        text-align: center;
+        padding: 5px 10px;
+        border-radius: 6px;
+        font-size: 0.8em;
+        white-space: nowrap;
+
+        /* Position the tooltip */
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-bottom: 5px;
+
+        /* Add transition */
+        opacity: 0;
+        transition:
+            opacity 0.2s,
+            visibility 0.2s;
+
+        /* Add a small triangle */
+        &::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #333 transparent transparent transparent;
+        }
+    }
+
+    .tooltip-container:hover .tooltip {
+        visibility: visible;
+        opacity: 1;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .tooltip {
+            background-color: #666;
+        }
+
+        .tooltip::after {
+            border-color: #666 transparent transparent transparent;
         }
     }
 </style>
