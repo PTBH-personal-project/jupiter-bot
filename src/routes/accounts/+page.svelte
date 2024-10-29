@@ -10,6 +10,9 @@
     let publicKey: string | null = "";
     let accounts: Account[] = [];
 
+    let showDeleteConfirmDialog = false;
+    let accountToDelete: number | null = null;
+
     async function loadAccounts() {
         try {
             console.log("Start loading accounts...");
@@ -48,14 +51,31 @@
     }
 
     async function deleteAccount(id: number) {
-        if (confirm("Are you sure you want to delete this account?")) {
+        console.log("Attempting to delete account:", id);
+        accountToDelete = id;
+        showDeleteConfirmDialog = true;
+    }
+
+    async function confirmDelete() {
+        if (accountToDelete !== null) {
             try {
-                await invoke("delete_account", { id });
-                await loadAccounts(); // Reload the list after deletion
+                console.log("Deleting account with ID:", accountToDelete);
+                await invoke("delete_account", { accountId: accountToDelete });
+                console.log("Account deleted successfully");
+                await loadAccounts();
             } catch (error) {
                 console.error("Error deleting account:", error);
+            } finally {
+                showDeleteConfirmDialog = false;
+                accountToDelete = null;
             }
         }
+    }
+
+    function cancelDelete() {
+        showDeleteConfirmDialog = false;
+        accountToDelete = null;
+        console.log("Account deletion cancelled by user");
     }
 </script>
 
@@ -154,6 +174,21 @@
                     <button type="submit" class="popup-button submit-button">Submit</button>
                 </div>
             </form>
+        </div>
+    </div>
+{/if}
+
+{#if showDeleteConfirmDialog}
+    <div class="popup-overlay">
+        <div class="popup-content confirm-dialog">
+            <h2>Confirm Deletion</h2>
+            <p>Are you sure you want to delete this account?</p>
+            <div class="button-group">
+                <button class="popup-button cancel-button" on:click={cancelDelete}> Cancel </button>
+                <button class="popup-button delete-button-confirm" on:click={confirmDelete}>
+                    Delete
+                </button>
+            </div>
         </div>
     </div>
 {/if}
@@ -486,6 +521,76 @@
 
         .tooltip::after {
             border-color: #666 transparent transparent transparent;
+        }
+    }
+
+    .confirm-dialog {
+        max-width: 400px;
+    }
+
+    .delete-button-confirm {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    .delete-button-confirm:hover {
+        background-color: #c82333;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .delete-button-confirm {
+            background-color: #dc3545;
+        }
+
+        .delete-button-confirm:hover {
+            background-color: #bd2130;
+        }
+    }
+
+    .popup-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .popup-content {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        width: 80%;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .button-group {
+        display: flex;
+        justify-content: flex-end;
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .popup-button {
+        padding: 12px 24px;
+        font-size: 1.1em;
+        font-weight: 500;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        min-width: 120px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .popup-content {
+            background-color: #2f2f2f;
+            color: #f6f6f6;
         }
     }
 </style>
