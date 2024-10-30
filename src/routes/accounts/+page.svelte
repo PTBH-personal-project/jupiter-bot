@@ -14,6 +14,47 @@
     let showDeleteConfirmDialog = false;
     let accountToDelete: number | null = null;
 
+    let showDetailsPopup = false;
+    let selectedAccount: Account | null = null;
+
+    let isEditing = false;
+    let editedAccount: Account | null = null;
+    let publicKeyOfEditedAccount: string | null = null;
+
+    function startEditing() {
+        editedAccount = { ...selectedAccount! };
+        isEditing = true;
+        publicKeyOfEditedAccount = editedAccount.public_key;
+    }
+
+    function cancelEditing() {
+        editedAccount = null;
+        isEditing = false;
+        publicKeyOfEditedAccount = null;
+    }
+
+    async function updateAccount() {
+        if (!editedAccount) return;
+
+        try {
+            await invoke("update_account", {
+                accountId: editedAccount.id,
+                accountName: editedAccount.name,
+                description: editedAccount.description,
+                privateKey: editedAccount.private_key,
+            });
+            await loadAccounts();
+            showNotification("Account updated successfully");
+            isEditing = false;
+            editedAccount = null;
+            publicKeyOfEditedAccount = null;
+            closeDetailsPopup();
+        } catch (error) {
+            console.error("Error updating account:", error);
+            showNotification("Failed to update account", true);
+        }
+    }
+
     async function loadAccounts() {
         try {
             console.log("Start loading accounts...");
@@ -36,6 +77,12 @@
     async function previewPublicKey() {
         const publicKeyResolved = await privateKeyToPublicKey(privateKeyOrPath);
         publicKey = publicKeyResolved ? publicKeyResolved.toBase58() : null;
+    }
+
+    async function previewEdittedPublicKey() {
+        if (!editedAccount) return null;
+        const publicKeyResolved = await privateKeyToPublicKey(editedAccount.private_key);
+        publicKeyOfEditedAccount = publicKeyResolved ? publicKeyResolved.toBase58() : null;
     }
 
     async function handleSubmit() {
@@ -94,7 +141,55 @@
             console.error("Error toggling account status:", error);
         }
     }
+
+    async function copyToClipboard(text: string, type: "Public Key" | "Private Key") {
+        try {
+            await navigator.clipboard.writeText(text);
+            showNotification(`${type} copied to clipboard`);
+        } catch (error) {
+            console.error("Failed to copy:", error);
+            showNotification("Failed to copy to clipboard", true);
+        }
+    }
+
+    let notification = {
+        show: false,
+        message: "",
+        isError: false,
+    };
+
+    function showNotification(message: string, isError = false) {
+        notification = {
+            show: true,
+            message,
+            isError,
+        };
+
+        setTimeout(() => {
+            notification = {
+                show: false,
+                message: "",
+                isError: false,
+            };
+        }, 2000);
+    }
+
+    function showAccountDetails(account: Account) {
+        selectedAccount = account;
+        showDetailsPopup = true;
+    }
+
+    function closeDetailsPopup() {
+        showDetailsPopup = false;
+        selectedAccount = null;
+    }
 </script>
+
+{#if notification.show}
+    <div class="notification {notification.isError ? 'error' : 'success'}">
+        {notification.message}
+    </div>
+{/if}
 
 <div class="accounts-container">
     <h1>Accounts</h1>
@@ -125,10 +220,18 @@
                         >
                             <td>{account.id}</td>
                             <td>{account.name}</td>
-                            <td class="key-cell" title={account.public_key}>
+                            <td
+                                class="key-cell"
+                                title={account.public_key}
+                                on:click={() => copyToClipboard(account.public_key, "Public Key")}
+                            >
                                 {account.public_key.slice(0, 8)}...{account.public_key.slice(-8)}
                             </td>
-                            <td class="key-cell" title={account.private_key}>
+                            <td
+                                class="key-cell"
+                                title={account.private_key}
+                                on:click={() => copyToClipboard(account.private_key, "Private Key")}
+                            >
                                 {account.private_key.slice(0, 8)}...{account.private_key.slice(-8)}
                             </td>
                             <td>{account.description || "-"}</td>
@@ -191,6 +294,30 @@
                                         </button>
                                         <span class="tooltip">Delete Account</span>
                                     </div>
+
+                                    <div class="tooltip-container">
+                                        <button
+                                            class="details-button"
+                                            on:click={() => showAccountDetails(account)}
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            >
+                                                <circle cx="12" cy="12" r="10" />
+                                                <line x1="12" y1="16" x2="12" y2="12" />
+                                                <line x1="12" y1="8" x2="12" y2="8" />
+                                            </svg>
+                                        </button>
+                                        <span class="tooltip">View Details</span>
+                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -218,7 +345,7 @@
                     ></textarea>
                 </div>
 
-                <div class="form-group">
+                <div class="form-group private-key">
                     <label for="private-key">Private Key</label>
                     <textarea
                         id="private-key"
@@ -227,6 +354,14 @@
                         rows="2"
                         on:input={previewPublicKey}
                     ></textarea>
+
+                    <div class="readonly-textarea">
+                        {publicKey
+                            ? `Public key: ${publicKey}`
+                            : privateKeyOrPath === ""
+                              ? "Please provide private key or path"
+                              : "Provided secret key is not valid"}
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -237,10 +372,6 @@
                         placeholder="Enter account description"
                         rows="2"
                     ></textarea>
-                </div>
-
-                <div class="readonly-textarea">
-                    {publicKey ? `Public key: ${publicKey}` : "Provided secret key is not valid"}
                 </div>
 
                 <div class="button-group">
@@ -264,6 +395,92 @@
                 <button class="popup-button delete-button-confirm" on:click={confirmDelete}>
                     Delete
                 </button>
+            </div>
+        </div>
+    </div>
+{/if}
+
+{#if showDetailsPopup && selectedAccount}
+    <div class="popup-overlay">
+        <div class="popup-content details-popup">
+            <h2>Account Details</h2>
+            <div class="details-grid">
+                <div class="detail-item">
+                    <span class="detail-label">ID:</span>
+                    <span class="detail-value">{selectedAccount.id}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Name:</span>
+                    {#if isEditing && editedAccount}
+                        <input
+                            type="text"
+                            class="edit-input"
+                            bind:value={editedAccount.name}
+                            placeholder="Enter account name"
+                        />
+                    {:else}
+                        <span class="detail-value">{selectedAccount.name}</span>
+                    {/if}
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Status:</span>
+                    <div class="detail-value-wrapper">
+                        <span class="status-badge status-{selectedAccount.status.toLowerCase()}">
+                            {selectedAccount.status}
+                        </span>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Description:</span>
+                    {#if isEditing && editedAccount}
+                        <textarea
+                            class="edit-input"
+                            bind:value={editedAccount.description}
+                            placeholder="Enter description"
+                            rows="2"
+                        ></textarea>
+                    {:else}
+                        <span class="detail-value">{selectedAccount.description || "-"}</span>
+                    {/if}
+                </div>
+                <div class="detail-item full-width">
+                    <span class="detail-label">Private Key:</span>
+                    {#if isEditing && editedAccount}
+                        <textarea
+                            class="edit-input key-input"
+                            bind:value={editedAccount.private_key}
+                            placeholder="Enter private key"
+                            rows="2"
+                            on:input={previewEdittedPublicKey}
+                        ></textarea>
+                        <div class="readonly-textarea">
+                            {publicKeyOfEditedAccount
+                                ? `Public key: ${publicKeyOfEditedAccount}`
+                                : "Provided secret key is not valid"}
+                        </div>
+                    {:else}
+                        <span class="detail-value key-value">{selectedAccount.private_key}</span>
+                    {/if}
+                </div>
+                <div class="detail-item full-width">
+                    <span class="detail-label">Public Key:</span>
+                    <span class="detail-value key-value">{selectedAccount.public_key}</span>
+                </div>
+            </div>
+            <div class="button-group">
+                {#if isEditing}
+                    <button class="popup-button cancel-button" on:click={cancelEditing}>
+                        Cancel
+                    </button>
+                    <button class="popup-button submit-button" on:click={updateAccount}>
+                        Save Changes
+                    </button>
+                {:else}
+                    <button class="popup-button cancel-button" on:click={closeDetailsPopup}>
+                        Close
+                    </button>
+                    <button class="popup-button edit-button" on:click={startEditing}> Edit </button>
+                {/if}
             </div>
         </div>
     </div>
@@ -337,6 +554,16 @@
         font-family: monospace;
         font-size: 0.9em;
         cursor: pointer;
+        user-select: none;
+        transition: background-color 0.2s ease;
+    }
+
+    .key-cell:hover {
+        background-color: rgba(57, 108, 216, 0.1);
+    }
+
+    .key-cell:active {
+        background-color: rgba(57, 108, 216, 0.2);
     }
 
     .status-badge {
@@ -392,8 +619,9 @@
 
     .readonly-textarea {
         width: 100%;
-        padding: 10px;
-        margin-bottom: 10px;
+        padding: 0px;
+        margin-bottom: 5px;
+        margin-top: -20px;
         font-size: 0.875em;
         color: #666;
         background-color: #f5f5f5;
@@ -777,6 +1005,200 @@
 
         .disabled-row td {
             opacity: 0.6;
+        }
+    }
+
+    .notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .notification.success {
+        background-color: #28a745;
+    }
+
+    .notification.error {
+        background-color: #dc3545;
+    }
+
+    @keyframes slideIn {
+        from {
+            transform: translateY(100px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .key-cell:hover {
+            background-color: rgba(74, 123, 224, 0.1);
+        }
+
+        .key-cell:active {
+            background-color: rgba(74, 123, 224, 0.2);
+        }
+
+        .notification.success {
+            background-color: #2ea043;
+        }
+
+        .notification.error {
+            background-color: #da3633;
+        }
+    }
+
+    .details-button {
+        background: none;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        color: #666;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .details-button:hover {
+        color: #396cd8;
+        background-color: rgba(57, 108, 216, 0.1);
+    }
+
+    .details-button:active {
+        transform: scale(0.95);
+    }
+
+    .details-popup {
+        max-width: 600px;
+    }
+
+    .details-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        margin: 20px 0;
+    }
+
+    .detail-item {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .detail-item.full-width {
+        grid-column: 1 / -1;
+    }
+
+    .detail-label {
+        font-weight: 500;
+        color: #666;
+        font-size: 0.9em;
+    }
+
+    .detail-value {
+        font-size: 1em;
+    }
+
+    .key-value {
+        font-family: monospace;
+        word-break: break-all;
+        padding: 8px;
+        background-color: #f5f5f5;
+        border-radius: 4px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .details-button {
+            color: #999;
+        }
+
+        .details-button:hover {
+            color: #4a7be0;
+            background-color: rgba(74, 123, 224, 0.1);
+        }
+
+        .detail-label {
+            color: #bbb;
+        }
+
+        .key-value {
+            background-color: #1f1f1f;
+        }
+    }
+
+    .detail-value-wrapper {
+        display: flex;
+        align-items: center;
+    }
+
+    .detail-item .status-badge {
+        display: inline-block;
+        width: fit-content;
+        padding: 4px 12px;
+    }
+
+    .edit-input {
+        width: 100%;
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        font-family: inherit;
+        font-size: 1em;
+        background-color: #fff;
+        color: #333;
+    }
+
+    .edit-button {
+        background-color: #396cd8;
+        color: white;
+    }
+
+    .edit-button:hover {
+        background-color: #2857b8;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .edit-input {
+            background-color: #1f1f1f;
+            color: #f6f6f6;
+            border-color: #444;
+        }
+
+        .edit-input::placeholder {
+            color: #888;
+        }
+
+        .edit-button {
+            background-color: #4a7be0;
+        }
+
+        .edit-button:hover {
+            background-color: #3967c4;
+        }
+    }
+
+    .key-input {
+        font-family: monospace;
+        font-size: 0.9em;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .key-input {
+            background-color: #1f1f1f;
+            color: #f6f6f6;
+            border-color: #444;
         }
     }
 </style>
