@@ -83,6 +83,17 @@
         accountToDelete = null;
         console.log("Account deletion cancelled by user");
     }
+
+    async function toggleAccountStatus(accountId: number, currentStatus: string) {
+        try {
+            const newStatus = currentStatus.toLowerCase() === "enabled" ? "Disabled" : "Enabled";
+            console.log(`Toggling account ${accountId} status to ${newStatus}`);
+            await invoke("toggle_account_status", { accountId, newStatus });
+            await loadAccounts();
+        } catch (error) {
+            console.error("Error toggling account status:", error);
+        }
+    }
 </script>
 
 <div class="accounts-container">
@@ -107,7 +118,11 @@
                 </thead>
                 <tbody>
                     {#each accounts as account}
-                        <tr>
+                        <tr
+                            class={account.status.toLowerCase() === "disabled"
+                                ? "disabled-row"
+                                : ""}
+                        >
                             <td>{account.id}</td>
                             <td>{account.name}</td>
                             <td class="key-cell" title={account.public_key}>
@@ -123,28 +138,59 @@
                                 </span>
                             </td>
                             <td>
-                                <div class="tooltip-container">
-                                    <button
-                                        class="delete-button"
-                                        on:click={() => deleteAccount(account.id)}
-                                    >
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            width="16"
-                                            height="16"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                            stroke="currentColor"
-                                            stroke-width="2"
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
+                                <div class="action-buttons">
+                                    <div class="tooltip-container">
+                                        <button
+                                            class="status-toggle-button"
+                                            on:click={() =>
+                                                toggleAccountStatus(account.id, account.status)}
                                         >
-                                            <circle cx="12" cy="12" r="10" />
-                                            <line x1="15" y1="9" x2="9" y2="15" />
-                                            <line x1="9" y1="9" x2="15" y2="15" />
-                                        </svg>
-                                    </button>
-                                    <span class="tooltip">Delete Account</span>
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            >
+                                                <path
+                                                    d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+                                                />
+                                            </svg>
+                                        </button>
+                                        <span class="tooltip">
+                                            {account.status.toLowerCase() === "enabled"
+                                                ? "Disable Account"
+                                                : "Enable Account"}
+                                        </span>
+                                    </div>
+
+                                    <div class="tooltip-container">
+                                        <button
+                                            class="delete-button"
+                                            on:click={() => deleteAccount(account.id)}
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            >
+                                                <circle cx="12" cy="12" r="10" />
+                                                <line x1="15" y1="9" x2="9" y2="15" />
+                                                <line x1="9" y1="9" x2="15" y2="15" />
+                                            </svg>
+                                        </button>
+                                        <span class="tooltip">Delete Account</span>
+                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -674,6 +720,63 @@
         .readonly-textarea {
             background-color: #2f2f2f;
             color: #bbb;
+        }
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .status-toggle-button {
+        background: none;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        color: #666;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .status-toggle-button:hover {
+        color: #396cd8;
+        background-color: rgba(57, 108, 216, 0.1);
+    }
+
+    .status-toggle-button:active {
+        transform: scale(0.95);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .status-toggle-button {
+            color: #999;
+        }
+
+        .status-toggle-button:hover {
+            color: #4a7be0;
+            background-color: rgba(74, 123, 224, 0.1);
+        }
+    }
+
+    .disabled-row {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .disabled-row td {
+        opacity: 0.7;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .disabled-row {
+            background-color: rgba(0, 0, 0, 0.2);
+        }
+
+        .disabled-row td {
+            opacity: 0.6;
         }
     }
 </style>

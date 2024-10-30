@@ -27,6 +27,7 @@ pub async fn run() {
             import_account,
             get_accounts,
             delete_account,
+            toggle_account_status,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
