@@ -19,6 +19,8 @@
         url: "",
         description: "",
     };
+    let showDeleteConfirmDialog = false;
+    let rpcToDelete: number | null = null;
 
     async function loadRpcEndpoints() {
         try {
@@ -74,6 +76,30 @@
         } catch (error) {
             console.error("Error importing RPC:", error);
         }
+    }
+
+    async function deleteRpc(id: number) {
+        rpcToDelete = id;
+        showDeleteConfirmDialog = true;
+    }
+
+    async function confirmDelete() {
+        if (rpcToDelete !== null) {
+            try {
+                await invoke("delete_rpc", { rpcId: rpcToDelete });
+                await loadRpcEndpoints();
+            } catch (error) {
+                console.error("Error deleting RPC:", error);
+            } finally {
+                showDeleteConfirmDialog = false;
+                rpcToDelete = null;
+            }
+        }
+    }
+
+    function cancelDelete() {
+        showDeleteConfirmDialog = false;
+        rpcToDelete = null;
     }
 
     onMount(() => {
@@ -145,6 +171,29 @@
                                         </svg>
                                     </button>
                                     <span class="tooltip">Edit RPC</span>
+                                </div>
+                                <div class="tooltip-container">
+                                    <button
+                                        class="icon-button delete-button"
+                                        on:click={() => deleteRpc(rpc.id)}
+                                    >
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="16"
+                                            height="16"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        >
+                                            <path d="M3 6h18" />
+                                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                        </svg>
+                                    </button>
+                                    <span class="tooltip">Delete RPC</span>
                                 </div>
                             </div>
                         </td>
@@ -219,6 +268,21 @@
                         disabled={!newRpc.name || !newRpc.url}
                     >
                         Import
+                    </button>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    {#if showDeleteConfirmDialog}
+        <div class="modal-overlay">
+            <div class="modal confirm-modal">
+                <h2>Confirm Delete</h2>
+                <p>Are you sure you want to delete this RPC endpoint?</p>
+                <div class="modal-buttons">
+                    <button class="cancel-button" on:click={cancelDelete}>Cancel</button>
+                    <button class="delete-button confirm-delete" on:click={confirmDelete}>
+                        Delete
                     </button>
                 </div>
             </div>
@@ -487,6 +551,99 @@
 
         .form-group input::placeholder {
             color: #666;
+        }
+    }
+
+    .delete-button:hover {
+        color: #dc3545;
+        background-color: rgba(220, 53, 69, 0.1);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .delete-button:hover {
+            color: #ff4d4d;
+            background-color: rgba(255, 77, 77, 0.1);
+        }
+    }
+
+    .confirm-modal {
+        width: 400px;
+    }
+
+    .confirm-modal p {
+        margin-bottom: 24px;
+        font-size: 16px;
+        line-height: 1.5;
+        color: #666;
+    }
+
+    .confirm-delete {
+        background-color: #dc3545;
+        color: white;
+        border: none;
+    }
+
+    .confirm-delete:hover {
+        background-color: #c82333;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .confirm-modal p {
+            color: #999;
+        }
+
+        .confirm-delete {
+            background-color: #dc3545;
+        }
+
+        .confirm-delete:hover {
+            background-color: #bd2130;
+        }
+    }
+
+    /* Update the confirm modal button styles */
+    .confirm-modal .modal-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 16px;
+        margin-top: 32px;
+    }
+
+    .confirm-modal .cancel-button,
+    .confirm-modal .confirm-delete {
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 16px;
+        min-width: 100px;
+        flex: 1; /* Make buttons take equal space */
+        max-width: 150px; /* Limit maximum width */
+    }
+
+    .confirm-modal .confirm-delete {
+        background-color: #dc3545;
+        color: white;
+        border: none;
+    }
+
+    .confirm-modal .confirm-delete:hover {
+        background-color: #c82333;
+    }
+
+    .confirm-modal .cancel-button {
+        background: none;
+        border: 1px solid #ddd;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .confirm-modal .cancel-button {
+            border-color: #444;
+            color: #f6f6f6;
+        }
+
+        .confirm-modal .confirm-delete:hover {
+            background-color: #bd2130;
         }
     }
 </style>

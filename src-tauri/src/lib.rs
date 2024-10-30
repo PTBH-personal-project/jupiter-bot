@@ -35,6 +35,7 @@ pub async fn run() {
             get_rpcs_endpoint,
             update_rpc,
             import_rpc,
+            delete_rpc,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
