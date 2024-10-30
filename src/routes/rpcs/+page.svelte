@@ -13,6 +13,12 @@
     let loading = true;
     let isEditing = false;
     let editedRpc: RpcEndpoint | null = null;
+    let showImportPopup = false;
+    let newRpc = {
+        name: "",
+        url: "",
+        description: "",
+    };
 
     async function loadRpcEndpoints() {
         try {
@@ -51,6 +57,25 @@
         }
     }
 
+    async function importRpc() {
+        try {
+            await invoke("import_rpc", {
+                name: newRpc.name,
+                url: newRpc.url,
+                description: newRpc.description,
+            });
+            await loadRpcEndpoints();
+            showImportPopup = false;
+            newRpc = {
+                name: "",
+                url: "",
+                description: "",
+            };
+        } catch (error) {
+            console.error("Error importing RPC:", error);
+        }
+    }
+
     onMount(() => {
         loadRpcEndpoints();
     });
@@ -58,6 +83,25 @@
 
 <div class="container">
     <h1>RPC Endpoints</h1>
+    <div class="import-section">
+        <button class="import-button" on:click={() => (showImportPopup = true)}>
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Import RPC
+        </button>
+    </div>
 
     {#if loading}
         <div class="loading">Loading RPC endpoints...</div>
@@ -129,6 +173,53 @@
                 <div class="modal-buttons">
                     <button class="cancel-button" on:click={cancelEditing}>Cancel</button>
                     <button class="save-button" on:click={saveRpc}>Save</button>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    {#if showImportPopup}
+        <div class="modal-overlay">
+            <div class="modal">
+                <h2>Import RPC Endpoint</h2>
+                <div class="form-group">
+                    <label for="import-name">Name</label>
+                    <input
+                        type="text"
+                        id="import-name"
+                        bind:value={newRpc.name}
+                        placeholder="Enter RPC name"
+                    />
+                </div>
+                <div class="form-group">
+                    <label for="import-url">URL</label>
+                    <input
+                        type="text"
+                        id="import-url"
+                        bind:value={newRpc.url}
+                        placeholder="Enter RPC URL"
+                    />
+                </div>
+                <div class="form-group">
+                    <label for="import-description">Description</label>
+                    <input
+                        type="text"
+                        id="import-description"
+                        bind:value={newRpc.description}
+                        placeholder="Enter RPC description"
+                    />
+                </div>
+                <div class="modal-buttons">
+                    <button class="cancel-button" on:click={() => (showImportPopup = false)}>
+                        Cancel
+                    </button>
+                    <button
+                        class="save-button"
+                        on:click={importRpc}
+                        disabled={!newRpc.name || !newRpc.url}
+                    >
+                        Import
+                    </button>
                 </div>
             </div>
         </div>
@@ -339,6 +430,63 @@
 
         .save-button:hover {
             background-color: #2857b8;
+        }
+    }
+
+    .import-button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px;
+        background-color: #396cd8;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
+        transition: background-color 0.2s;
+    }
+
+    .import-button:hover {
+        background-color: #2857b8;
+    }
+
+    .import-button svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .modal h2 {
+        font-size: 28px;
+        margin-bottom: 32px;
+        font-weight: 600;
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 14px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-size: 16px;
+        line-height: 1.5;
+    }
+
+    .form-group input::placeholder {
+        color: #999;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .import-button {
+            background-color: #4a7be0;
+        }
+
+        .import-button:hover {
+            background-color: #396cd8;
+        }
+
+        .form-group input::placeholder {
+            color: #666;
         }
     }
 </style>
