@@ -17,7 +17,8 @@
         "@solana/web3.js": "^1.95.4",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-shell": "^2",
-        "bs58": "^6.0.0"
+        "bs58": "^6.0.0",
+        "buffer": "^6.0.3"
     },
     "devDependencies": {
         "@sveltejs/adapter-static": "^3.0.1",

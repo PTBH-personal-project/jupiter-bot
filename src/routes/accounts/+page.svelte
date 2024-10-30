@@ -3,6 +3,9 @@
     import { onMount } from "svelte";
     import { privateKeyToPublicKey } from "../../utils/account_utils";
     import type { Account } from "../../types/accounts";
+    import { Keypair } from "@solana/web3.js";
+    import { Buffer } from "buffer";
+    import bs58 from "bs58";
 
     let showPopup = false;
     let privateKeyOrPath = "";
@@ -183,6 +186,12 @@
         showDetailsPopup = false;
         selectedAccount = null;
     }
+
+    function generateNewKeypair() {
+        const keypair = Keypair.generate();
+        privateKeyOrPath = bs58.encode(keypair.secretKey);
+        previewPublicKey();
+    }
 </script>
 
 {#if notification.show}
@@ -346,7 +355,33 @@
                 </div>
 
                 <div class="form-group private-key">
-                    <label for="private-key">Private Key</label>
+                    <div class="label-with-button">
+                        <label for="private-key">Private Key</label>
+                        <div class="tooltip-container">
+                            <button
+                                type="button"
+                                class="refresh-button"
+                                on:click={generateNewKeypair}
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <path
+                                        d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"
+                                    />
+                                </svg>
+                            </button>
+                            <span class="tooltip">Generate new keypair</span>
+                        </div>
+                    </div>
                     <textarea
                         id="private-key"
                         bind:value={privateKeyOrPath}
@@ -783,34 +818,27 @@
         background-color: #333;
         color: white;
         text-align: center;
-        padding: 5px 10px;
-        border-radius: 6px;
-        font-size: 0.8em;
+        padding: 5px 8px;
+        border-radius: 4px;
+        font-size: 12px;
         white-space: nowrap;
-
-        /* Position the tooltip */
-        bottom: 100%;
+        z-index: 1;
+        bottom: 125%;
         left: 50%;
         transform: translateX(-50%);
-        margin-bottom: 5px;
-
-        /* Add transition */
         opacity: 0;
-        transition:
-            opacity 0.2s,
-            visibility 0.2s;
+        transition: opacity 0.2s;
+    }
 
-        /* Add a small triangle */
-        &::after {
-            content: "";
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            margin-left: -5px;
-            border-width: 5px;
-            border-style: solid;
-            border-color: #333 transparent transparent transparent;
-        }
+    .tooltip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: #333 transparent transparent transparent;
     }
 
     .tooltip-container:hover .tooltip {
@@ -1199,6 +1227,46 @@
             background-color: #1f1f1f;
             color: #f6f6f6;
             border-color: #444;
+        }
+    }
+
+    .label-with-button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .refresh-button {
+        background: none;
+        border: none;
+        padding: 4px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        color: #666;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .refresh-button:hover {
+        color: #396cd8;
+        background-color: rgba(57, 108, 216, 0.1);
+    }
+
+    .refresh-button:active {
+        transform: scale(0.95);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .refresh-button {
+            color: #999;
+        }
+
+        .refresh-button:hover {
+            color: #4a7be0;
+            background-color: rgba(74, 123, 224, 0.1);
         }
     }
 </style>
