@@ -24,6 +24,31 @@
     let editedAccount: Account | null = null;
     let publicKeyOfEditedAccount: string | null = null;
 
+    let balances = new Map<number, number | null>();
+    let loadingBalances = new Map<number, boolean>();
+
+    async function fetchBalance(account: Account) {
+        try {
+            loadingBalances.set(account.id, true);
+            loadingBalances = loadingBalances; // trigger reactivity
+
+            const balance = await invoke("get_account_balance", {
+                publicKey: account.public_key,
+                tokenAddress: null,
+            });
+
+            balances.set(account.id, Number(balance) / 1e9); // Convert lamports to SOL
+            balances = balances; // trigger reactivity
+        } catch (error) {
+            console.error("Error fetching balance:", error);
+            balances.set(account.id, null);
+            balances = balances; // trigger reactivity
+        } finally {
+            loadingBalances.set(account.id, false);
+            loadingBalances = loadingBalances; // trigger reactivity
+        }
+    }
+
     function startEditing() {
         editedAccount = { ...selectedAccount! };
         isEditing = true;
@@ -62,6 +87,10 @@
         try {
             console.log("Start loading accounts...");
             accounts = await invoke("get_accounts");
+            // Initialize balance loading for each account
+            accounts.forEach((account) => {
+                fetchBalance(account);
+            });
             console.log("Loaded accounts:", accounts);
         } catch (error) {
             console.error("Error loading accounts:", error);
@@ -217,6 +246,33 @@
                         <th>Private Key</th>
                         <th>Description</th>
                         <th>Status</th>
+                        <th>
+                            <div class="balance-header">
+                                SOL
+                                <div class="tooltip-container">
+                                    <button 
+                                        class="refresh-button" 
+                                        on:click={() => accounts.forEach(account => fetchBalance(account))}
+                                        aria-label="Refresh all balances"
+                                    >
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="14"
+                                            height="14"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        >
+                                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+                                        </svg>
+                                    </button>
+                                    <span class="tooltip">Refresh all balances</span>
+                                </div>
+                            </div>
+                        </th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -248,6 +304,13 @@
                                 <span class="status-badge status-{account.status.toLowerCase()}">
                                     {account.status}
                                 </span>
+                            </td>
+                            <td>
+                                {#if loadingBalances.get(account.id)}
+                                    Loading...
+                                {:else}
+                                    {balances.get(account.id)}
+                                {/if}
                             </td>
                             <td>
                                 <div class="action-buttons">
@@ -721,6 +784,7 @@
         td {
             border-bottom-color: #444;
         }
+
 
         .popup-content {
             background-color: #2f2f2f;
@@ -1249,6 +1313,10 @@
         justify-content: center;
         transition: all 0.2s ease-in-out;
     }
+    .balance-header .refresh-button {
+        margin-bottom: 3px;
+        margin-left: 4px;
+    }
 
     .refresh-button:hover {
         color: #396cd8;
@@ -1260,6 +1328,81 @@
     }
 
     @media (prefers-color-scheme: dark) {
+        .refresh-button {
+            color: #999;
+        }
+
+        .refresh-button:hover {
+            color: #4a7be0;
+            background-color: rgba(74, 123, 224, 0.1);
+        }
+    }
+
+    .balance-header {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+    }
+
+    .tooltip-container {
+        position: relative;
+        display: inline-block;
+    }
+
+    .tooltip {
+        visibility: hidden;
+        position: absolute;
+        background-color: #333;
+        color: white;
+        text-align: center;
+        padding: 5px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        z-index: 1;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .tooltip-container:hover .tooltip {
+        visibility: visible;
+        opacity: 1;
+    }
+
+    .refresh-button {
+        padding: 2px;
+        height: 20px;
+        width: 20px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #666;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+        vertical-align: middle;
+    }
+
+    .refresh-button:hover {
+        color: #396cd8;
+        background-color: rgba(57, 108, 216, 0.1);
+    }
+
+    .refresh-button:active {
+        transform: scale(0.95);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .tooltip {
+            background-color: #666;
+        }
+
         .refresh-button {
             color: #999;
         }

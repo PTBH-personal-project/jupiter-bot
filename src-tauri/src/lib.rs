@@ -29,6 +29,7 @@ pub async fn run() {
             delete_account,
             toggle_account_status,
             update_account,
+            get_account_balance,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
