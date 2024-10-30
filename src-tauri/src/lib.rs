@@ -35,6 +35,7 @@ pub async fn run() {
         .expect("error while running tauri application");
 
     let db = setup_db(&app).await;
-    app.manage(AppState { db });
+    let rpc_client = setup_rpc_client();
+    app.manage(AppState { db, rpc_client });
     app.run(|_, _| {});
 }

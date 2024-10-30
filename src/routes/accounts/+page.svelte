@@ -250,9 +250,10 @@
                             <div class="balance-header">
                                 SOL
                                 <div class="tooltip-container">
-                                    <button 
-                                        class="refresh-button" 
-                                        on:click={() => accounts.forEach(account => fetchBalance(account))}
+                                    <button
+                                        class="refresh-button"
+                                        on:click={() =>
+                                            accounts.forEach((account) => fetchBalance(account))}
                                         aria-label="Refresh all balances"
                                     >
                                         <svg
@@ -266,7 +267,9 @@
                                             stroke-linecap="round"
                                             stroke-linejoin="round"
                                         >
-                                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+                                            <path
+                                                d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"
+                                            />
                                         </svg>
                                     </button>
                                     <span class="tooltip">Refresh all balances</span>
@@ -784,7 +787,6 @@
         td {
             border-bottom-color: #444;
         }
-
 
         .popup-content {
             background-color: #2f2f2f;
