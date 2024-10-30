@@ -38,11 +38,11 @@
     async function saveRpc() {
         if (!editedRpc) return;
         try {
-            await invoke("update_rpc", { 
+            await invoke("update_rpc", {
                 rpcId: editedRpc.id,
                 name: editedRpc.name,
                 url: editedRpc.url,
-                description: editedRpc.description
+                description: editedRpc.description,
             });
             await loadRpcEndpoints();
             cancelEditing();
@@ -58,7 +58,7 @@
 
 <div class="container">
     <h1>RPC Endpoints</h1>
-    
+
     {#if loading}
         <div class="loading">Loading RPC endpoints...</div>
     {:else}
@@ -92,8 +92,12 @@
                                             stroke-linecap="round"
                                             stroke-linejoin="round"
                                         >
-                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                            <path
+                                                d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                                            />
+                                            <path
+                                                d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                                            />
                                         </svg>
                                     </button>
                                     <span class="tooltip">Edit RPC</span>
@@ -146,7 +150,8 @@
         margin-top: 20px;
     }
 
-    th, td {
+    th,
+    td {
         padding: 12px;
         text-align: left;
         border-bottom: 1px solid #ddd;
@@ -168,7 +173,8 @@
     }
 
     @media (prefers-color-scheme: dark) {
-        th, td {
+        th,
+        td {
             border-bottom-color: #333;
         }
 
@@ -281,7 +287,8 @@
         margin-top: 32px;
     }
 
-    .cancel-button, .save-button {
+    .cancel-button,
+    .save-button {
         padding: 12px 24px;
         border-radius: 6px;
         cursor: pointer;
