@@ -1,8 +1,10 @@
 mod accounts;
+mod rpcs;
 mod types;
 mod utils;
 
 pub use accounts::*;
+pub use rpcs::*;
 use tauri::Manager;
 pub use types::*;
 pub use utils::*;
@@ -30,6 +32,7 @@ pub async fn run() {
             toggle_account_status,
             update_account,
             get_account_balance,
+            get_rpcs_endpoint,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
