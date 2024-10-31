@@ -3,15 +3,37 @@ mod rpcs;
 mod types;
 mod utils;
 
+use std::str::FromStr;
+
 pub use accounts::*;
+use jupiter_swap_api_client::quote::{QuoteRequest, SwapMode};
 pub use rpcs::*;
-use tauri::Manager;
+use solana_sdk::{
+    msg,
+    pubkey::{self, Pubkey},
+};
+use tauri::{Manager, State};
 pub use types::*;
 pub use utils::*;
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+async fn greet(app: State<'_, AppState>, token_address: &str) -> Result<String, String> {
+    let jupiter_client = &app.jupiter_client;
+    let input_mint = Pubkey::from_str(token_address).unwrap();
+    let output_mint = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap();
+    let quote_request = QuoteRequest {
+        amount: 1000000,
+        input_mint,
+        output_mint,
+        slippage_bps: 50,
+        ..QuoteRequest::default()
+    };
+    let quote_response = jupiter_client.quote(&quote_request).await.unwrap();
+    msg!("{:?}", &quote_response);
+    Ok(format!(
+        "Number of out amount {}",
+        &quote_response.out_amount
+    ))
 }
 
 #[tauri::command]
@@ -42,6 +64,11 @@ pub async fn run() {
 
     let db = setup_db(&app).await;
     let rpc_client = setup_rpc_client();
-    app.manage(AppState { db, rpc_client });
+    let jupiter_client = setup_jupiter_client();
+    app.manage(AppState {
+        db,
+        rpc_client,
+        jupiter_client,
+    });
     app.run(|_, _| {});
 }

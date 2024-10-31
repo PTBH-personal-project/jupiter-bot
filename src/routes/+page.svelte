@@ -5,7 +5,7 @@
     let greetMsg = "";
 
     async function greet() {
-        greetMsg = await invoke("greet", { name });
+        greetMsg = await invoke("greet", { tokenAddress: name });
     }
 
     async function capitalize() {
@@ -27,10 +27,10 @@
             <img src="/svelte.svg" class="logo svelte-kit" alt="SvelteKit Logo" />
         </a>
     </div>
-    <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
+    <p>Paste the token address and get the overview of the token</p>
 
     <form class="row" on:submit|preventDefault={greet}>
-        <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
+        <input id="greet-input" placeholder="Enter a token address..." bind:value={name} />
         <button type="submit">Greet</button>
     </form>
     <p>{greetMsg}</p>
@@ -108,7 +108,9 @@
         font-family: inherit;
         color: #0f0f0f;
         background-color: #ffffff;
-        transition: border-color 0.25s;
+        transition:
+            border-color 0.25s,
+            width 0.3s ease;
         box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
     }
 
@@ -131,6 +133,8 @@
 
     #greet-input {
         margin-right: 5px;
+        width: 500px;
+        font-family: monospace;
     }
 
     @media (prefers-color-scheme: dark) {
