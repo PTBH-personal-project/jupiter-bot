@@ -30,6 +30,6 @@ solana-sdk = "2.1.0"
 solana-client = "2.1.0"
 jupiter-swap-api-client = { git = "https://github.com/anhoangphuc/jupiter-swap-api-client.git", package = "jupiter-swap-api-client"}
 spl-token = "5.0.2"
-
+mpl-token-metadata = "=5.0.0-beta.0"
 
 
