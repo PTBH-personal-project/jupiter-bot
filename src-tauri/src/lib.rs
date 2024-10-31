@@ -61,6 +61,7 @@ pub async fn run() {
             import_rpc,
             delete_rpc,
             get_token_info,
+            get_token_price,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");

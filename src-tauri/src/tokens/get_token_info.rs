@@ -18,15 +18,25 @@ pub async fn get_token_info(
     let mint = Mint::unpack(&mint_data.data).unwrap();
 
     let metadata_address = Metadata::find_pda(&pubkey).0;
-    let metadata_account = rpc_client.get_account(&metadata_address).unwrap();
-    let metadata_data = Metadata::from_bytes(&metadata_account.data).unwrap();
-
-    Ok(TokenInfo {
-        name: metadata_data.name.trim().to_string(),
-        address: token_address,
-        symbol: metadata_data.symbol.trim().to_string(),
-        decimals: mint.decimals,
-        total_supply: mint.supply,
-        uri: metadata_data.uri.trim().to_string(),
-    })
+    match rpc_client.get_account(&metadata_address) {
+        Ok(metadata_account) => {
+            let metadata_data = Metadata::from_bytes(&metadata_account.data).unwrap();
+            Ok(TokenInfo {
+                name: metadata_data.name.trim().to_string(),
+                address: token_address,
+                symbol: metadata_data.symbol.trim().to_string(),
+                decimals: mint.decimals,
+                total_supply: mint.supply,
+                uri: metadata_data.uri.trim().to_string(),
+            })
+        }
+        Err(_) => Ok(TokenInfo {
+            name: "".to_string(),
+            address: token_address,
+            symbol: "".to_string(),
+            decimals: mint.decimals,
+            total_supply: mint.supply,
+            uri: "".to_string(),
+        }),
+    }
 }

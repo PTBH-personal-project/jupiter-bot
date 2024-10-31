@@ -6,21 +6,42 @@
     let tokenInfo: TokenInfo | null = null;
     let logoUri = "";
     let isLoading = false;
+    let tokenPrice: number | null = null;
+    let isPriceLoading = false;
+
+    async function fetchPrice() {
+        if (!tokenInfo) return;
+        isPriceLoading = true;
+        try {
+            tokenPrice = await invoke("get_token_price", {
+                tokenAddress: tokenInfo.address,
+                tokenDecimals: tokenInfo.decimals,
+            });
+        } catch (error) {
+            console.error("Error fetching token price:", error);
+        } finally {
+            isPriceLoading = false;
+        }
+    }
 
     async function fetchInfo() {
         isLoading = true;
         logoUri = "";
+        tokenPrice = null;
         try {
             tokenInfo = await invoke("get_token_info", { tokenAddress: address });
-            if (tokenInfo && tokenInfo.uri) {
-                try {
-                    const response = await fetch(tokenInfo.uri);
-                    const metadata = await response.json();
-                    if (metadata.image) {
-                        logoUri = metadata.image;
+            if (tokenInfo) {
+                fetchPrice(); // Start loading price asynchronously
+                if (tokenInfo.uri) {
+                    try {
+                        const response = await fetch(tokenInfo.uri);
+                        const metadata = await response.json();
+                        if (metadata.image) {
+                            logoUri = metadata.image;
+                        }
+                    } catch (error) {
+                        console.error("Error fetching token metadata:", error);
                     }
-                } catch (error) {
-                    console.error("Error fetching token metadata:", error);
                 }
             }
         } finally {
@@ -57,10 +78,10 @@
                 <div class="info-item">
                     <span class="label">Name:</span>
                     <div class="value-with-logo">
+                        <span class="value">{tokenInfo.name}</span>
                         {#if logoUri}
                             <img src={logoUri} alt="Token Logo" class="token-logo" />
                         {/if}
-                        <span class="value">{tokenInfo.name}</span>
                     </div>
                 </div>
                 <div class="info-item">
@@ -78,10 +99,10 @@
                 <div class="info-item">
                     <span class="label">Total Supply:</span>
                     <span class="value">
-                        {new Intl.NumberFormat('en-US', {
+                        {new Intl.NumberFormat("en-US", {
                             maximumFractionDigits: 2,
                             minimumFractionDigits: 0,
-                            useGrouping: true
+                            useGrouping: true,
                         }).format(tokenInfo.totalSupply / Math.pow(10, tokenInfo.decimals))}
                     </span>
                 </div>
@@ -89,20 +110,24 @@
                     <span class="label">URI:</span>
                     <span class="value">{tokenInfo.uri}</span>
                 </div>
+                <div class="info-item">
+                    <span class="label">Price (USDT):</span>
+                    <span class="value">
+                        {#if isPriceLoading}
+                            <span class="skeleton skeleton-text"></span>
+                        {:else if tokenPrice !== null}
+                            {(tokenPrice / Math.pow(10, 6)).toFixed(6)}
+                        {:else}
+                            Token not supported in Jupiter
+                        {/if}
+                    </span>
+                </div>
             </div>
         </div>
     {/if}
 </main>
 
 <style>
-    .logo.vite:hover {
-        filter: drop-shadow(0 0 2em #747bff);
-    }
-
-    .logo.svelte-kit:hover {
-        filter: drop-shadow(0 0 2em #ff3e00);
-    }
-
     :root {
         font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
         font-size: 16px;
@@ -126,17 +151,6 @@
         text-align: center;
     }
 
-    .logo {
-        height: 6em;
-        padding: 1.5em;
-        will-change: filter;
-        transition: 0.75s;
-    }
-
-    .logo.tauri:hover {
-        filter: drop-shadow(0 0 2em #24c8db);
-    }
-
     .row {
         display: flex;
         justify-content: center;
@@ -146,10 +160,6 @@
         font-weight: 500;
         color: #646cff;
         text-decoration: inherit;
-    }
-
-    a:hover {
-        color: #535bf2;
     }
 
     h1 {
@@ -282,18 +292,17 @@
             color: #4a7be0;
         }
         .value-with-logo {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        padding-left: 1rem;
-    }
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
 
-    .token-logo {
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        object-fit: cover;
-    }
+        .token-logo {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
     }
 
     .skeleton {
