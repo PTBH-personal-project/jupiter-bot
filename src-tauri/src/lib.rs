@@ -1,5 +1,6 @@
 mod accounts;
 mod rpcs;
+mod tokens;
 mod types;
 mod utils;
 
@@ -13,6 +14,7 @@ use solana_sdk::{
     pubkey::{self, Pubkey},
 };
 use tauri::{Manager, State};
+use tokens::*;
 pub use types::*;
 pub use utils::*;
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -58,6 +60,7 @@ pub async fn run() {
             update_rpc,
             import_rpc,
             delete_rpc,
+            get_token_info,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");

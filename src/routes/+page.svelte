@@ -5,7 +5,8 @@
     let greetMsg = "";
 
     async function greet() {
-        greetMsg = await invoke("greet", { tokenAddress: name });
+        greetMsg = await invoke("get_token_info", { tokenAddress: name });
+        console.log(greetMsg);
     }
 
     async function capitalize() {
