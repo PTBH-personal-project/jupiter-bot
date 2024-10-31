@@ -14,7 +14,7 @@
 </script>
 
 <main class="container">
-    <h1>Welcome to Raydium Bot</h1>
+    <h1>Welcome to Jupiter Bot</h1>
 
     <div class="row">
         <a href="https://vitejs.dev" target="_blank">

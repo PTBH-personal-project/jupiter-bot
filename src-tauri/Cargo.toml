@@ -28,4 +28,6 @@ sqlx = { version = "0.7.2", features = ["sqlite", "runtime-tokio"] }
 futures = "0.3"
 solana-sdk = "2.1.0"
 solana-client = "2.1.0"
+jupiter-swap-api-client = { git = "https://github.com/anhoangphuc/jupiter-swap-api-client.git", package = "jupiter-swap-api-client"}
+
 
