@@ -9,4 +9,5 @@ pub struct TokenInfo {
     pub decimals: u8,
     pub total_supply: u64,
     pub uri: String,
+    pub logo_uri: String,
 }

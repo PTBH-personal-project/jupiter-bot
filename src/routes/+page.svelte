@@ -44,6 +44,10 @@
                     } catch (error) {
                         console.error("Error fetching token metadata:", error);
                     }
+                } else if (tokenInfo.logoUri) {
+                    logoUri = tokenInfo.logoUri;
+                } else {
+                    console.error("No logo URI found for token");
                 }
             }
         } catch (err) {
