@@ -8,6 +8,7 @@
     let isLoading = false;
     let tokenPrice: number | null = null;
     let isPriceLoading = false;
+    let error: string | null = null;
 
     async function fetchPrice() {
         if (!tokenInfo) return;
@@ -28,10 +29,11 @@
         isLoading = true;
         logoUri = "";
         tokenPrice = null;
+        error = null;
         try {
             tokenInfo = await invoke("get_token_info", { tokenAddress: address });
             if (tokenInfo) {
-                fetchPrice(); // Start loading price asynchronously
+                fetchPrice();
                 if (tokenInfo.uri) {
                     try {
                         const response = await fetch(tokenInfo.uri);
@@ -44,6 +46,10 @@
                     }
                 }
             }
+        } catch (err) {
+            console.error("Error fetching token info:", err);
+            error = err instanceof Error ? err.message : String(err);
+            tokenInfo = null;
         } finally {
             isLoading = false;
         }
@@ -59,7 +65,11 @@
         <input id="greet-input" placeholder="Enter an solana address..." bind:value={address} />
         <button type="submit">Fetch</button>
     </form>
-    {#if isLoading}
+    {#if error}
+        <div class="error-message">
+            <p>{error}</p>
+        </div>
+    {:else if isLoading}
         <div class="token-info">
             <h2 class="skeleton skeleton-text"></h2>
             <div class="info-grid">
@@ -341,6 +351,31 @@
                 rgba(255, 255, 255, 0.05)
             );
             background-size: 200% 100%;
+        }
+    }
+
+    .error-message {
+        margin-top: 2rem;
+        padding: 1rem;
+        background: rgba(255, 0, 0, 0.1);
+        border: 1px solid rgba(255, 0, 0, 0.3);
+        border-radius: 8px;
+        color: #ff4444;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .error-message p {
+        margin: 0;
+        font-family: monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .error-message {
+            background: rgba(255, 0, 0, 0.15);
+            border-color: rgba(255, 0, 0, 0.4);
+            color: #ff6666;
         }
     }
 </style>
