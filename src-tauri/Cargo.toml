@@ -26,10 +26,17 @@ reqwest = { version = "0.12.8", features = ["json"] }
 tokio = { version = "1.33.0", features = ["time", "rt", "macros"] }
 sqlx = { version = "0.7.2", features = ["sqlite", "runtime-tokio"] }
 futures = "0.3"
-solana-sdk = "2.1.0"
-solana-client = "2.1.0"
+solana-sdk = "2.0.3"
+solana-client = "2.0.3"
 jupiter-swap-api-client = { git = "https://github.com/anhoangphuc/jupiter-swap-api-client.git", package = "jupiter-swap-api-client"}
 spl-token = "5.0.2"
+spl-token-2022 = "5.0.2"
 mpl-token-metadata = "=5.0.0-beta.0"
 
+[patch.crates-io.aes-gcm-siv]
+git = "https://github.com/RustCrypto/AEADs"
+rev = "6105d7a5591aefa646a95d12b5e8d3f55a9214ef"
 
+[patch.crates-io.curve25519-dalek]
+git = "https://github.com/solana-labs/curve25519-dalek.git"
+rev = "c14774464c4d38de553c6ef2f48a10982c1b4801"

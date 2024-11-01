@@ -1,7 +1,7 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
     import { onMount } from "svelte";
-    import { privateKeyToPublicKey } from "../../utils/account_utils";
+    import { privateKeyToPublicKey } from "$lib/utils/account_utils";
     import type { Account } from "../../types/accounts";
     import { Keypair } from "@solana/web3.js";
     import { Buffer } from "buffer";
