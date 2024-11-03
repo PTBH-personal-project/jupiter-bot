@@ -12,9 +12,14 @@
   "app": {
     "windows": [
       {
-        "title": "hello-world",
-        "width": 800,
-        "height": 600
+        "fullscreen": false,
+        "maximized": true,
+        "resizable": true,
+        "title": "Jupiter Bot",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 940,
+        "minHeight": 600
       }
     ],
     "security": {

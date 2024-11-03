@@ -2,14 +2,14 @@
     import NavBar from "../components/NavBar.svelte";
     import { fly } from "svelte/transition";
 
-    let isNavOpen = false;
+    let isNavOpen = true;
 
     function handleNavToggle(event: CustomEvent) {
         isNavOpen = event.detail.isOpen;
     }
 </script>
 
-<NavBar on:navToggle={handleNavToggle} />
+<NavBar {isNavOpen} on:navToggle={handleNavToggle} />
 
 <main class:nav-open={isNavOpen} transition:fly={{ x: isNavOpen ? 250 : 0, duration: 300 }}>
     <slot />
@@ -24,11 +24,12 @@
 
     main {
         padding: 20px;
-        padding-left: 60px; /* Adjust this value based on your toggle button size */
-        transition: margin-left 0.3s ease-in-out;
+        padding-left: 84px; /* Increased to account for collapsed navbar */
+        transition: all 0.3s ease-in-out;
+        min-height: 100vh;
     }
 
     main.nav-open {
-        margin-left: 250px; /* This should match the width of your navbar */
+        padding-left: 270px; /* Increased to account for expanded navbar */
     }
 </style>

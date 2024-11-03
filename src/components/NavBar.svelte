@@ -1,22 +1,24 @@
 <script lang="ts">
-    import { fly } from "svelte/transition";
     import { createEventDispatcher } from "svelte";
+    import { fly } from "svelte/transition";
 
-    let isOpen = false;
+    // Add prop to receive initial state
+    export let isNavOpen = true;
+
     const dispatch = createEventDispatcher();
 
     function toggleNav() {
-        isOpen = !isOpen;
-        dispatch("navToggle", { isOpen });
+        isNavOpen = !isNavOpen;
+        dispatch("navToggle", { isOpen: isNavOpen });
     }
 </script>
 
 <div class="nav-container">
     <button class="toggle-btn" on:click={toggleNav}>
-        {isOpen ? "←" : "→"}
+        {isNavOpen ? "←" : "→"}
     </button>
 
-    {#if isOpen}
+    {#if isNavOpen}
         <nav transition:fly={{ x: -250, duration: 300 }}>
             <ul>
                 <li><a href="/">Home</a></li>

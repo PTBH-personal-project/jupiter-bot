@@ -11,4 +11,5 @@ export interface TokenInfo {
 export interface TokenAccount {
     pubkey: string;
     mint: string;
+    amount: string;
 }
