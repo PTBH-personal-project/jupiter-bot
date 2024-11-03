@@ -46,7 +46,6 @@ pub async fn get_all_token_account_for_pubkey(
             TokenAccountsFilter::ProgramId(TOKEN_PROGRAM_ID),
         )
         .unwrap();
-    println!("token_accounts: {:?}", keyed_token_accounts);
     let mut token_accounts = Vec::new();
     for account in keyed_token_accounts.iter() {
         let token_account = match &account.account.data {
@@ -59,22 +58,24 @@ pub async fn get_all_token_account_for_pubkey(
                     .get("tokenAmount")
                     .unwrap()
                     .to_string();
+                let mint = parsed_info
+                    .get("mint")
+                    .unwrap()
+                    .to_string()
+                    .trim_matches('"')
+                    .to_string();
+                let amount = parsed_info
+                    .get("tokenAmount")
+                    .unwrap()
+                    .get("uiAmountString")
+                    .unwrap()
+                    .to_string()
+                    .trim_matches('"')
+                    .to_string();
                 TokenAccount {
                     pubkey: account.pubkey.to_string(),
-                    mint: parsed_info
-                        .get("mint")
-                        .unwrap()
-                        .to_string()
-                        .trim_matches('"')
-                        .to_string(),
-                    amount: parsed_info
-                        .get("tokenAmount")
-                        .unwrap()
-                        .get("uiAmountString")
-                        .unwrap()
-                        .to_string()
-                        .trim_matches('"')
-                        .to_string(),
+                    mint,
+                    amount,
                 }
             }
             _ => TokenAccount {

@@ -17,7 +17,7 @@ pub async fn get_token_info(
     let rpc_client = &state.rpc_client;
     let mint_data = rpc_client
         .get_account(&pubkey)
-        .map_err(|_| format!("Failed to get account {}", token_address))?;
+        .map_err(|e| format!("Failed to get account {} {:?}", token_address, e))?;
     match mint_data.owner {
         spl_token::ID => get_spl_token_info(rpc_client, &token_address, &mint_data).await,
         spl_token_2022::ID => Err("Token 2022 is not supported".to_string()),

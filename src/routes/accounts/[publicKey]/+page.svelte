@@ -3,7 +3,7 @@
     import { invoke } from "@tauri-apps/api/core";
     import { onMount } from "svelte";
     import type { Account } from "../../../types/accounts";
-    import type { TokenAccount } from "../../../types/tokens";
+    import type { TokenAccount, TokenInfo } from "../../../types/tokens";
 
     const publicKey = $page.params.publicKey;
     let account: Account | null = null;
@@ -14,6 +14,8 @@
     let tokenAccounts: TokenAccount[] = [];
     let isTokenAccountsLoading = true;
     let tokenAccountsError: string | null = null;
+    let tokenInfoMap: Map<string, TokenInfo | null> = new Map();
+    let tokenInfoLoading: Map<string, boolean> = new Map();
 
     onMount(() => {
         loadAccountDetails().then(() => {
@@ -58,6 +60,42 @@
         await fetchBalance();
     }
 
+    async function fetchTokenInfo(mintAddress: string) {
+        if (tokenInfoLoading.get(mintAddress) || tokenInfoMap.has(mintAddress)) return;
+        
+        tokenInfoLoading.set(mintAddress, true);
+        tokenInfoMap = tokenInfoMap; // Trigger reactivity
+
+        try {
+            const tokenInfo = await invoke("get_token_info", {
+                tokenAddress: mintAddress
+            }) as TokenInfo;
+            
+            // Fetch logo from URI if logoUri is empty
+            if (!tokenInfo.logoUri && tokenInfo.uri) {
+                try {
+                    const response = await fetch(tokenInfo.uri);
+                    const metadata = await response.json();
+                    if (metadata.image) {
+                        tokenInfo.logoUri = metadata.image;
+                    }
+                } catch (error) {
+                    console.error("Error fetching token metadata:", error);
+                }
+            }
+            
+            tokenInfoMap.set(mintAddress, tokenInfo);
+            tokenInfoMap = tokenInfoMap; // Trigger reactivity
+        } catch (err) {
+            console.error(`Error fetching token info for ${mintAddress}:`, err);
+            tokenInfoMap.set(mintAddress, null);
+            tokenInfoMap = tokenInfoMap; // Trigger reactivity
+        } finally {
+            tokenInfoLoading.set(mintAddress, false);
+            tokenInfoLoading = tokenInfoLoading; // Trigger reactivity
+        }
+    }
+
     async function loadTokenAccounts() {
         if (!account) return;
         isTokenAccountsLoading = true;
@@ -66,13 +104,24 @@
             tokenAccounts = await invoke("get_all_token_account_for_pubkey", {
                 pubkey: account.public_key,
             });
-            console.log("tokenAccounts: ", tokenAccounts);
+            // Fetch token info for each mint address
+            tokenAccounts.forEach(account => {
+                fetchTokenInfo(account.mint);
+            });
         } catch (err) {
             console.error("Error loading token accounts:", err);
             tokenAccountsError = err instanceof Error ? err.message : String(err);
         } finally {
             isTokenAccountsLoading = false;
         }
+    }
+
+    async function refreshTokenInfo(mintAddress: string) {
+        // Clear existing token info to force refresh
+        tokenInfoMap.delete(mintAddress);
+        tokenInfoMap = tokenInfoMap;
+        // Fetch new token info
+        await fetchTokenInfo(mintAddress);
     }
 </script>
 
@@ -202,6 +251,7 @@
                     <table class="token-accounts-table">
                         <thead>
                             <tr>
+                                <th>Token</th>
                                 <th>Token Account</th>
                                 <th>Mint</th>
                                 <th>Amount</th>
@@ -210,6 +260,33 @@
                         <tbody>
                             {#each tokenAccounts as account}
                                 <tr>
+                                    <td class="token-cell">
+                                        {#if tokenInfoLoading.get(account.mint)}
+                                            <div class="skeleton skeleton-text" style="width: 120px;" />
+                                        {:else}
+                                            <div class="tooltip-wrapper">
+                                                <div 
+                                                    class="token-info clickable" 
+                                                    on:click={() => refreshTokenInfo(account.mint)}
+                                                    role="button"
+                                                    tabindex="0"
+                                                    data-tooltip="Refresh"
+                                                >
+                                                    {#if tokenInfoMap.get(account.mint)?.logoUri}
+                                                        <img 
+                                                            src={tokenInfoMap.get(account.mint)?.logoUri}
+                                                            alt={tokenInfoMap.get(account.mint)?.symbol || 'Token'} 
+                                                            class="token-logo"
+                                                        />
+                                                    {/if}
+                                                    <span class="token-symbol">
+                                                        {tokenInfoMap.get(account.mint)?.symbol || 'N/A'}
+                                                    </span>
+                                                </div>
+                                                <span class="tooltip">{@html 'Refresh'}</span>
+                                            </div>
+                                        {/if}
+                                    </td>
                                     <td class="address-cell">
                                         <span class="address">{account.pubkey}</span>
                                     </td>
@@ -515,5 +592,101 @@
 
     .amount {
         font-size: 0.875rem;
+    }
+
+    .token-cell {
+        min-width: 150px;
+        padding-right: 1rem;
+    }
+
+    .token-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex: 1;
+    }
+
+    .token-logo {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .token-symbol {
+        font-weight: 500;
+        font-size: 0.875rem;
+    }
+
+    .token-cell-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .token-info.clickable {
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+
+    .token-info.clickable:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .token-info.clickable:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+    }
+
+    .tooltip-wrapper {
+        position: relative;
+        display: inline-block;
+    }
+
+    .tooltip {
+        visibility: hidden;
+        position: absolute;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        z-index: 1;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .tooltip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+    }
+
+    .tooltip-wrapper:hover .tooltip {
+        visibility: visible;
+        opacity: 1;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .tooltip {
+            background: rgba(0, 0, 0, 0.9);
+        }
+        
+        .tooltip::after {
+            border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+        }
     }
 </style>
