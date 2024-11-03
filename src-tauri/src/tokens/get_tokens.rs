@@ -8,7 +8,7 @@ pub async fn get_all_tokens(state: tauri::State<'_, AppState>) -> Result<Vec<Tok
         r#"
         SELECT *
         FROM tokens
-        "#
+        "#,
     )
     .fetch_all(db)
     .await

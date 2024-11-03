@@ -32,10 +32,10 @@
             await Promise.all(
                 tokens.map(async (token) => {
                     try {
-                        const price = await invoke("get_token_price", {
+                        const price = (await invoke("get_token_price", {
                             tokenAddress: token.address,
                             tokenDecimals: token.decimals,
-                        }) as number;
+                        })) as number;
                         tokenPrices[token.address] = price;
                     } catch (error) {
                         console.error(`Error fetching price for ${token.address}:`, error);
@@ -148,21 +148,19 @@
     async function refreshToken(token: TokenInfo) {
         try {
             // Fetch updated token info
-            const updatedInfo = await invoke("get_token_info", { 
-                tokenAddress: token.address 
-            }) as TokenInfo;
+            const updatedInfo = (await invoke("get_token_info", {
+                tokenAddress: token.address,
+            })) as TokenInfo;
 
             // Update the token in the list
-            tokens = tokens.map(t => 
-                t.address === token.address ? updatedInfo : t
-            );
+            tokens = tokens.map((t) => (t.address === token.address ? updatedInfo : t));
 
             // Fetch updated price
             try {
-                const price = await invoke("get_token_price", {
+                const price = (await invoke("get_token_price", {
                     tokenAddress: token.address,
                     tokenDecimals: token.decimals,
-                }) as number;
+                })) as number;
                 tokenPrices[token.address] = price;
             } catch (error) {
                 console.error(`Error fetching price for ${token.address}:`, error);
@@ -178,8 +176,8 @@
 
     async function deleteToken(token: TokenInfo) {
         try {
-            await invoke("delete_token", { 
-                address: token.address 
+            await invoke("delete_token", {
+                address: token.address,
             });
             await loadTokens();
             showNotification("Token deleted successfully!");
@@ -203,9 +201,7 @@
 
     <div class="tokens-container">
         {#if tokens.length === 0}
-            <div class="empty-state">
-                No tokens imported yet. Click "Import Token" to add one.
-            </div>
+            <div class="empty-state">No tokens imported yet. Click "Import Token" to add one.</div>
         {:else}
             <table class="tokens-table">
                 <thead>
@@ -224,9 +220,13 @@
                         <tr>
                             <td>
                                 <div class="token-name-cell">
-                                    <span>{token.name || 'Unknown'}</span>
+                                    <span>{token.name || "Unknown"}</span>
                                     {#if token.logoUri}
-                                        <img src={token.logoUri} alt="Token Logo" class="token-logo" />
+                                        <img
+                                            src={token.logoUri}
+                                            alt="Token Logo"
+                                            class="token-logo"
+                                        />
                                     {/if}
                                 </div>
                             </td>
@@ -244,7 +244,9 @@
                                 {#if tokenPrices[token.address] === undefined}
                                     <span class="skeleton skeleton-text"></span>
                                 {:else if tokenPrices[token.address] !== null}
-                                    {(Number(tokenPrices[token.address]) / Math.pow(10, 6)).toFixed(6)}
+                                    {(Number(tokenPrices[token.address]) / Math.pow(10, 6)).toFixed(
+                                        6
+                                    )}
                                 {:else}
                                     Not supported
                                 {/if}
@@ -252,22 +254,46 @@
                             <td>
                                 <div class="action-buttons">
                                     <Tooltip text="Refresh token information">
-                                        <button 
-                                            class="icon-button" 
+                                        <button
+                                            class="icon-button"
                                             on:click={() => refreshToken(token)}
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            >
+                                                <path
+                                                    d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"
+                                                />
                                             </svg>
                                         </button>
                                     </Tooltip>
                                     <Tooltip text="Delete token">
-                                        <button 
-                                            class="icon-button delete-button" 
+                                        <button
+                                            class="icon-button delete-button"
                                             on:click={() => deleteToken(token)}
                                         >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            >
+                                                <path
+                                                    d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"
+                                                />
                                             </svg>
                                         </button>
                                     </Tooltip>

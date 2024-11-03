@@ -53,6 +53,7 @@ pub async fn run() {
             import_account,
             get_accounts,
             get_account_by_public_key,
+            get_all_token_account_for_pubkey,
             delete_account,
             toggle_account_status,
             update_account,

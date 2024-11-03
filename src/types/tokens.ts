@@ -7,3 +7,8 @@ export interface TokenInfo {
     uri: string;
     logoUri: string;
 }
+
+export interface TokenAccount {
+    pubkey: string;
+    mint: string;
+}
