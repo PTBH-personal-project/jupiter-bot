@@ -5,4 +5,5 @@ export interface TokenInfo {
     decimals: number;
     totalSupply: number;
     uri: string;
+    logoUri: string;
 }
