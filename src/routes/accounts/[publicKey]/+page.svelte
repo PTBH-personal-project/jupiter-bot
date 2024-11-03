@@ -17,6 +17,15 @@
     let tokenInfoMap: Map<string, TokenInfo | null> = new Map();
     let tokenInfoLoading: Map<string, boolean> = new Map();
 
+    // Add these variables for the confirmation dialog
+    let showDeleteConfirmation = false;
+    let tokenAccountToDelete: string | null = null;
+
+    // Add notification state variables
+    let showNotification = false;
+    let notificationMessage = "";
+    let notificationType: "success" | "error" = "success";
+
     onMount(() => {
         loadAccountDetails().then(() => {
             fetchBalance();
@@ -62,15 +71,15 @@
 
     async function fetchTokenInfo(mintAddress: string) {
         if (tokenInfoLoading.get(mintAddress) || tokenInfoMap.has(mintAddress)) return;
-        
+
         tokenInfoLoading.set(mintAddress, true);
         tokenInfoMap = tokenInfoMap; // Trigger reactivity
 
         try {
-            const tokenInfo = await invoke("get_token_info", {
-                tokenAddress: mintAddress
-            }) as TokenInfo;
-            
+            const tokenInfo = (await invoke("get_token_info", {
+                tokenAddress: mintAddress,
+            })) as TokenInfo;
+
             // Fetch logo from URI if logoUri is empty
             if (!tokenInfo.logoUri && tokenInfo.uri) {
                 try {
@@ -83,7 +92,7 @@
                     console.error("Error fetching token metadata:", error);
                 }
             }
-            
+
             tokenInfoMap.set(mintAddress, tokenInfo);
             tokenInfoMap = tokenInfoMap; // Trigger reactivity
         } catch (err) {
@@ -105,7 +114,7 @@
                 pubkey: account.public_key,
             });
             // Fetch token info for each mint address
-            tokenAccounts.forEach(account => {
+            tokenAccounts.forEach((account) => {
                 fetchTokenInfo(account.mint);
             });
         } catch (err) {
@@ -122,6 +131,47 @@
         tokenInfoMap = tokenInfoMap;
         // Fetch new token info
         await fetchTokenInfo(mintAddress);
+    }
+
+    // Update the delete function
+    async function deleteTokenAccount(pubkey: string) {
+        try {
+            await invoke("delete_token_account", {
+                owner: $page.params.publicKey,
+                tokenAccountPubkey: pubkey,
+            });
+            // Remove the token account from the list
+            tokenAccounts = tokenAccounts.filter((account) => account.pubkey !== pubkey);
+            showDeleteConfirmation = false;
+            tokenAccountToDelete = null;
+
+            // Show success notification
+            notificationMessage = "Token account deleted successfully";
+            notificationType = "success";
+            showNotification = true;
+
+            // Hide notification after 3 seconds
+            setTimeout(() => {
+                showNotification = false;
+            }, 3000);
+        } catch (err) {
+            console.error("Error deleting token account:", err);
+            // Show error notification
+            notificationMessage = "Failed to delete token account";
+            notificationType = "error";
+            showNotification = true;
+
+            // Hide notification after 3 seconds
+            setTimeout(() => {
+                showNotification = false;
+            }, 3000);
+        }
+    }
+
+    // Add this function to handle delete button click
+    function handleDeleteClick(pubkey: string) {
+        tokenAccountToDelete = pubkey;
+        showDeleteConfirmation = true;
     }
 </script>
 
@@ -255,6 +305,7 @@
                                 <th>Token Account</th>
                                 <th>Mint</th>
                                 <th>Amount</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -262,28 +313,34 @@
                                 <tr>
                                     <td class="token-cell">
                                         {#if tokenInfoLoading.get(account.mint)}
-                                            <div class="skeleton skeleton-text" style="width: 120px;" />
+                                            <div
+                                                class="skeleton skeleton-text"
+                                                style="width: 120px;"
+                                            />
                                         {:else}
                                             <div class="tooltip-wrapper">
-                                                <div 
-                                                    class="token-info clickable" 
+                                                <div
+                                                    class="token-info clickable"
                                                     on:click={() => refreshTokenInfo(account.mint)}
                                                     role="button"
                                                     tabindex="0"
                                                     data-tooltip="Refresh"
                                                 >
                                                     {#if tokenInfoMap.get(account.mint)?.logoUri}
-                                                        <img 
-                                                            src={tokenInfoMap.get(account.mint)?.logoUri}
-                                                            alt={tokenInfoMap.get(account.mint)?.symbol || 'Token'} 
+                                                        <img
+                                                            src={tokenInfoMap.get(account.mint)
+                                                                ?.logoUri}
+                                                            alt={tokenInfoMap.get(account.mint)
+                                                                ?.symbol || "Token"}
                                                             class="token-logo"
                                                         />
                                                     {/if}
                                                     <span class="token-symbol">
-                                                        {tokenInfoMap.get(account.mint)?.symbol || 'N/A'}
+                                                        {tokenInfoMap.get(account.mint)?.symbol ||
+                                                            "N/A"}
                                                     </span>
                                                 </div>
-                                                <span class="tooltip">{@html 'Refresh'}</span>
+                                                <span class="tooltip">{@html "Refresh"}</span>
                                             </div>
                                         {/if}
                                     </td>
@@ -296,6 +353,35 @@
                                     <td class="amount-cell">
                                         <span class="amount">{account.amount}</span>
                                     </td>
+                                    <td class="action-cell">
+                                        <div class="tooltip-wrapper">
+                                            <button
+                                                class="delete-button"
+                                                on:click={() => handleDeleteClick(account.pubkey)}
+                                                role="button"
+                                                tabindex="0"
+                                            >
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    width="16"
+                                                    height="16"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                >
+                                                    <path d="M3 6h18" />
+                                                    <path
+                                                        d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"
+                                                    />
+                                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                                </svg>
+                                            </button>
+                                            <span class="tooltip">{@html "Delete"}</span>
+                                        </div>
+                                    </td>
                                 </tr>
                             {/each}
                         </tbody>
@@ -305,6 +391,41 @@
         </div>
     {/if}
 </main>
+
+<!-- Update the confirmation dialog -->
+{#if showDeleteConfirmation}
+    <div class="popup-overlay">
+        <div class="popup-content confirm-dialog">
+            <h2>Delete Token Account</h2>
+            <p>Are you sure to delete this token account and redeem SOL?</p>
+            <div class="button-group">
+                <button
+                    class="popup-button cancel-button"
+                    on:click={() => {
+                        showDeleteConfirmation = false;
+                        tokenAccountToDelete = null;
+                    }}
+                >
+                    Cancel
+                </button>
+                <button
+                    class="popup-button delete-button-confirm"
+                    on:click={() =>
+                        tokenAccountToDelete && deleteTokenAccount(tokenAccountToDelete)}
+                >
+                    Delete
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<!-- Add notification component at the end of the file, after the confirmation dialog -->
+{#if showNotification}
+    <div class="notification {notificationType}">
+        {notificationMessage}
+    </div>
+{/if}
 
 <style>
     .container {
@@ -548,11 +669,20 @@
     }
 
     .token-accounts-table th {
-        text-align: left;
+        text-align: center;
         padding: 1rem;
         font-weight: 500;
         color: #666;
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .token-accounts-table th:first-child {
+        text-align: left;
+    }
+
+    .token-accounts-table th:nth-child(4) {
+        text-align: left;
+        padding-left: 1rem;
     }
 
     .token-accounts-table td {
@@ -585,13 +715,16 @@
 
     .amount-cell {
         min-width: 120px;
-        text-align: right;
-        padding-right: 2rem;
+        text-align: left;
+        padding-left: 1rem;
         font-family: monospace;
     }
 
     .amount {
         font-size: 0.875rem;
+        display: block;
+        text-align: left;
+        width: 100%;
     }
 
     .token-cell {
@@ -684,9 +817,175 @@
         .tooltip {
             background: rgba(0, 0, 0, 0.9);
         }
-        
+
         .tooltip::after {
             border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+        }
+    }
+
+    .action-cell {
+        width: 48px;
+        text-align: center;
+        padding: 0 0.5rem;
+    }
+
+    .delete-button {
+        background: none;
+        border: none;
+        padding: 0.25rem;
+        cursor: pointer;
+        color: #666;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .delete-button:hover {
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+    }
+
+    .delete-button:active {
+        transform: scale(0.95);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .delete-button {
+            color: #999;
+        }
+
+        .delete-button:hover {
+            color: #f87171;
+            background: rgba(248, 113, 113, 0.1);
+        }
+    }
+
+    /* Update the confirmation dialog styles */
+    .popup-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .popup-content {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        width: 80%;
+        max-width: 400px;
+    }
+
+    .popup-content h2 {
+        margin: 0 0 1rem 0;
+        font-size: 1.25rem;
+    }
+
+    .popup-content p {
+        margin: 0 0 1.5rem 0;
+        color: #666;
+    }
+
+    .button-group {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+    }
+
+    .popup-button {
+        padding: 12px 24px;
+        font-size: 1.1em;
+        font-weight: 500;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        min-width: 120px;
+    }
+
+    .delete-button-confirm {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    .delete-button-confirm:hover {
+        background-color: #c82333;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .delete-button-confirm:active {
+        transform: translateY(0);
+        background-color: #bd2130;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .popup-content {
+            background-color: #2f2f2f;
+            color: #f6f6f6;
+        }
+
+        .popup-content p {
+            color: #9ca3af;
+        }
+
+        .delete-button-confirm {
+            background-color: #dc3545;
+        }
+
+        .delete-button-confirm:hover {
+            background-color: #bd2130;
+        }
+    }
+
+    /* Add notification styles */
+    .notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .notification.success {
+        background-color: #28a745;
+    }
+
+    .notification.error {
+        background-color: #dc3545;
+    }
+
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .notification.success {
+            background-color: #2ea043;
+        }
+
+        .notification.error {
+            background-color: #da3633;
         }
     }
 </style>

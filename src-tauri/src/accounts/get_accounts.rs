@@ -89,3 +89,21 @@ pub async fn get_all_token_account_for_pubkey(
 
     Ok(token_accounts)
 }
+
+pub async fn get_account_from_public_key(
+    db: &Db,
+    public_key: &str,
+) -> Result<Option<Account>, sqlx::Error> {
+    let account = sqlx::query_as::<_, Account>(
+        r#"
+        SELECT id, name, public_key, private_key, status, description
+        FROM accounts 
+        WHERE public_key = ?
+        "#,
+    )
+    .bind(public_key)
+    .fetch_optional(db)
+    .await?;
+
+    Ok(account)
+}
