@@ -1,0 +1,1671 @@
+<script lang="ts">
+    import { page } from "$app/stores";
+    import { invoke } from "@tauri-apps/api/core";
+    import { onMount } from "svelte";
+    import type { Account } from "../../../types/accounts";
+    import type { TokenAccount, TokenInfo } from "../../../types/tokens";
+    import { txLink, addressLink } from "$lib/utils/link_utils";
+
+    const publicKey = $page.params.publicKey;
+    let account: Account | null = null;
+    let balance: number | null = null;
+    let isLoading = true;
+    let isBalanceLoading = true;
+    let error: string | null = null;
+    let tokenAccounts: TokenAccount[] = [];
+    let isTokenAccountsLoading = true;
+    let tokenAccountsError: string | null = null;
+    let tokenInfoMap: Map<string, TokenInfo | null> = new Map();
+    let tokenInfoLoading: Map<string, boolean> = new Map();
+
+    // Add these variables for the confirmation dialog
+    let showDeleteConfirmation = false;
+    let tokenAccountToDelete: string | null = null;
+
+    // Add notification state variables
+    let showNotification = false;
+    let notificationMessage = "";
+    let notificationType: "success" | "error" = "success";
+
+    // Add loading state for delete operation
+    let isDeleting = false;
+
+    // Add progress state
+    let progress = 100;
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
+
+    // Add state for copy tooltip
+    let hoveredAddress = "";
+    let copiedAddress = "";
+
+    // Add new state variables for payer and receiver
+    let selectedPayer = "";
+    let selectedReceiver = "";
+    let availableAccounts: Account[] = []; // This will store the list of accounts
+
+    onMount(() => {
+        loadAccountDetails().then(() => {
+            fetchBalance();
+            loadTokenAccounts();
+            loadAvailableAccounts();
+        });
+    });
+
+    async function loadAccountDetails() {
+        isLoading = true;
+        error = null;
+        try {
+            account = await invoke("get_account_by_public_key", {
+                publicKey: publicKey,
+            });
+        } catch (err) {
+            console.error("Error loading account details:", err);
+            error = err instanceof Error ? err.message : String(err);
+        } finally {
+            isLoading = false;
+        }
+    }
+
+    async function fetchBalance() {
+        if (!account) return;
+        isBalanceLoading = true;
+        try {
+            const balanceInLamports = (await invoke("get_account_balance", {
+                publicKey: account.public_key,
+                tokenAddress: null,
+            })) as number;
+            balance = balanceInLamports / 1e9; // Convert lamports to SOL
+        } catch (err) {
+            console.error("Error fetching balance:", err);
+            balance = null;
+        } finally {
+            isBalanceLoading = false;
+        }
+    }
+
+    async function refreshBalance() {
+        await fetchBalance();
+    }
+
+    async function fetchTokenInfo(mintAddress: string) {
+        if (tokenInfoLoading.get(mintAddress) || tokenInfoMap.has(mintAddress)) return;
+
+        tokenInfoLoading.set(mintAddress, true);
+        tokenInfoMap = tokenInfoMap; // Trigger reactivity
+
+        try {
+            const tokenInfo = (await invoke("get_token_info", {
+                tokenAddress: mintAddress,
+            })) as TokenInfo;
+
+            // Fetch logo from URI if logoUri is empty
+            if (!tokenInfo.logoUri && tokenInfo.uri) {
+                try {
+                    const response = await fetch(tokenInfo.uri);
+                    const metadata = await response.json();
+                    if (metadata.image) {
+                        tokenInfo.logoUri = metadata.image;
+                    }
+                } catch (error) {
+                    console.error("Error fetching token metadata:", error);
+                }
+            }
+
+            tokenInfoMap.set(mintAddress, tokenInfo);
+            tokenInfoMap = tokenInfoMap; // Trigger reactivity
+        } catch (err) {
+            console.error(`Error fetching token info for ${mintAddress}:`, err);
+            tokenInfoMap.set(mintAddress, null);
+            tokenInfoMap = tokenInfoMap; // Trigger reactivity
+        } finally {
+            tokenInfoLoading.set(mintAddress, false);
+            tokenInfoLoading = tokenInfoLoading; // Trigger reactivity
+        }
+    }
+
+    async function loadTokenAccounts() {
+        if (!account) return;
+        isTokenAccountsLoading = true;
+        tokenAccountsError = null;
+        try {
+            tokenAccounts = await invoke("get_all_token_account_for_pubkey", {
+                pubkey: account.public_key,
+            });
+            // Fetch token info for each mint address
+            tokenAccounts.forEach((account) => {
+                fetchTokenInfo(account.mint);
+            });
+        } catch (err) {
+            console.error("Error loading token accounts:", err);
+            tokenAccountsError = err instanceof Error ? err.message : String(err);
+        } finally {
+            isTokenAccountsLoading = false;
+        }
+    }
+
+    async function refreshTokenInfo(mintAddress: string) {
+        // Clear existing token info to force refresh
+        tokenInfoMap.delete(mintAddress);
+        tokenInfoMap = tokenInfoMap;
+        // Fetch new token info
+        await fetchTokenInfo(mintAddress);
+    }
+
+    // Modify the delete function to include payer and receiver
+    async function deleteTokenAccount(pubkey: string) {
+        try {
+            isDeleting = true;
+            const txHash = (await invoke("delete_token_account", {
+                owner: $page.params.publicKey,
+                tokenAccountPubkey: pubkey,
+                payer: selectedPayer,
+                receiver: selectedReceiver,
+            })) as string;
+            // Remove the token account from the list
+            tokenAccounts = tokenAccounts.filter((account) => account.pubkey !== pubkey);
+            showDeleteConfirmation = false;
+            tokenAccountToDelete = null;
+
+            // Show success notification with link
+            notificationMessage = `Token account deleted successfully. <a href="${txLink(txHash)}" target="_blank" rel="noopener noreferrer">View transaction</a>`;
+            notificationType = "success";
+            showNotification = true;
+
+            // Clean up existing interval if any
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+
+            // Reset and start progress bar
+            progress = 100;
+            progressInterval = setInterval(() => {
+                if (progress <= 0) {
+                    clearInterval(progressInterval!);
+                    progressInterval = null;
+                    showNotification = false;
+                } else {
+                    progress -= 1.67; // 100 / (6000ms / 100ms)
+                }
+            }, 100);
+        } catch (err) {
+            console.error("Error deleting token account:", err);
+            notificationMessage = "Failed to delete token account";
+            notificationType = "error";
+            showNotification = true;
+
+            // Clean up existing interval if any
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+
+            // Start progress bar for error notification
+            progress = 100;
+            progressInterval = setInterval(() => {
+                if (progress <= 0) {
+                    clearInterval(progressInterval!);
+                    progressInterval = null;
+                    showNotification = false;
+                } else {
+                    progress -= 1.67;
+                }
+            }, 100);
+        } finally {
+            isDeleting = false;
+        }
+    }
+
+    // Add this function to handle delete button click
+    function handleDeleteClick(pubkey: string) {
+        tokenAccountToDelete = pubkey;
+        showDeleteConfirmation = true;
+    }
+
+    // Function to handle copy with tooltip
+    function copyToClipboard(text: string) {
+        navigator.clipboard.writeText(text);
+        copiedAddress = text;
+        setTimeout(() => {
+            copiedAddress = "";
+        }, 1500); // Hide "copied" message after 1.5 seconds
+    }
+
+    // Add function to load available accounts
+    async function loadAvailableAccounts() {
+        try {
+            const accounts = (await invoke("get_accounts")) as Account[];
+            // Filter out any null or undefined values and ensure proper typing
+            availableAccounts = accounts.filter(
+                (account): account is Account =>
+                    account != null &&
+                    typeof account.public_key === "string" &&
+                    typeof account.name === "string"
+            );
+
+            // Set default payer to current account if it exists
+            if (account && account.public_key) {
+                selectedPayer = account.public_key;
+            }
+        } catch (err) {
+            console.error("Error loading available accounts:", err);
+            // Initialize with empty array on error
+            availableAccounts = [];
+        }
+    }
+</script>
+
+<main class="container">
+    <div class="header">
+        <h1>Account Details</h1>
+    </div>
+
+    {#if isLoading}
+        <div class="loading-state">
+            <div class="skeleton skeleton-text" style="width: 60%;" />
+            <div class="skeleton skeleton-text" style="width: 40%;" />
+            <div class="skeleton skeleton-text" style="width: 80%;" />
+        </div>
+    {:else if error}
+        <div class="error-state">
+            <p>Error loading account details: {error}</p>
+        </div>
+    {:else if account}
+        <div class="account-details">
+            <div class="detail-group">
+                <div class="detail-item">
+                    <label>Name</label>
+                    <div class="value-container">
+                        <span class="value">{account.name}</span>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <label>Status</label>
+                    <div class="value-container">
+                        <span class="status-text {account.status.toLowerCase()}">
+                            {account.status}
+                        </span>
+                    </div>
+                </div>
+                <div class="detail-item">
+                    <label>Balance</label>
+                    <div class="value-container">
+                        {#if isBalanceLoading}
+                            <span class="skeleton skeleton-text" style="width: 80px;"></span>
+                        {:else if balance !== null}
+                            <div class="balance-wrapper">
+                                <span class="value">{balance.toFixed(4)} SOL</span>
+                                <button
+                                    class="refresh-button"
+                                    on:click={refreshBalance}
+                                    title="Refresh balance"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                    >
+                                        <path
+                                            d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+                        {:else}
+                            <span class="error-text">Error loading balance</span>
+                        {/if}
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-item">
+                <label>Public Key</label>
+                <div class="value-container">
+                    <span class="address">{account.public_key}</span>
+                </div>
+            </div>
+
+            <div class="detail-item">
+                <label>Description</label>
+                <div class="value-container">
+                    {account.description || "No description"}
+                </div>
+            </div>
+        </div>
+    {:else}
+        <div class="error-state">
+            <p>Account not found</p>
+        </div>
+    {/if}
+
+    {#if account}
+        <div class="token-accounts-section">
+            <h2>Token Accounts</h2>
+
+            {#if isTokenAccountsLoading}
+                <div class="loading-state">
+                    <div class="skeleton skeleton-text" style="width: 60%;" />
+                    <div class="skeleton skeleton-text" style="width: 40%;" />
+                </div>
+            {:else if tokenAccountsError}
+                <div class="error-state">
+                    <p>Error loading token accounts: {tokenAccountsError}</p>
+                </div>
+            {:else if tokenAccounts.length === 0}
+                <div class="empty-state">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <p>No token accounts found for this wallet</p>
+                </div>
+            {:else}
+                <div class="token-accounts-table-container">
+                    <table class="token-accounts-table">
+                        <thead>
+                            <tr>
+                                <th>Token</th>
+                                <th>Token Account</th>
+                                <th>Mint</th>
+                                <th>Amount</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {#each tokenAccounts as account}
+                                <tr>
+                                    <td class="token-cell">
+                                        {#if tokenInfoLoading.get(account.mint)}
+                                            <div
+                                                class="skeleton skeleton-text"
+                                                style="width: 120px;"
+                                            />
+                                        {:else}
+                                            <div class="tooltip-wrapper">
+                                                <div
+                                                    class="token-info clickable"
+                                                    on:click={() => refreshTokenInfo(account.mint)}
+                                                    role="button"
+                                                    tabindex="0"
+                                                    data-tooltip="Refresh"
+                                                >
+                                                    {#if tokenInfoMap.get(account.mint)?.logoUri}
+                                                        <img
+                                                            src={tokenInfoMap.get(account.mint)
+                                                                ?.logoUri}
+                                                            alt={tokenInfoMap.get(account.mint)
+                                                                ?.symbol || "Token"}
+                                                            class="token-logo"
+                                                        />
+                                                    {/if}
+                                                    <span class="token-symbol">
+                                                        {tokenInfoMap.get(account.mint)?.symbol ||
+                                                            "N/A"}
+                                                    </span>
+                                                </div>
+                                                <span class="tooltip">{@html "Refresh"}</span>
+                                            </div>
+                                        {/if}
+                                    </td>
+                                    <td class="address-cell">
+                                        <div class="address-wrapper">
+                                            <a
+                                                href={addressLink(account.pubkey)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="address-link"
+                                            >
+                                                <span class="address">{account.pubkey}</span>
+                                            </a>
+                                            <div class="tooltip-wrapper">
+                                                <button
+                                                    class="copy-button"
+                                                    on:click={() => copyToClipboard(account.pubkey)}
+                                                    on:mouseenter={() =>
+                                                        (hoveredAddress = account.pubkey)}
+                                                    on:mouseleave={() => (hoveredAddress = "")}
+                                                >
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        width="14"
+                                                        height="14"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                    >
+                                                        <rect
+                                                            x="9"
+                                                            y="9"
+                                                            width="13"
+                                                            height="13"
+                                                            rx="2"
+                                                            ry="2"
+                                                        />
+                                                        <path
+                                                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                                <span
+                                                    class="tooltip copy-tooltip"
+                                                    class:show={hoveredAddress === account.pubkey ||
+                                                        copiedAddress === account.pubkey}
+                                                >
+                                                    {copiedAddress === account.pubkey
+                                                        ? "Copied to clipboard"
+                                                        : "Copy to clipboard"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="address-cell">
+                                        <div class="address-wrapper">
+                                            <a
+                                                href={addressLink(account.mint)}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="address-link"
+                                            >
+                                                <span class="address">{account.mint}</span>
+                                            </a>
+                                            <div class="tooltip-wrapper">
+                                                <button
+                                                    class="copy-button"
+                                                    on:click={() => copyToClipboard(account.mint)}
+                                                    on:mouseenter={() =>
+                                                        (hoveredAddress = account.mint)}
+                                                    on:mouseleave={() => (hoveredAddress = "")}
+                                                >
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        width="14"
+                                                        height="14"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                    >
+                                                        <rect
+                                                            x="9"
+                                                            y="9"
+                                                            width="13"
+                                                            height="13"
+                                                            rx="2"
+                                                            ry="2"
+                                                        />
+                                                        <path
+                                                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                                <span
+                                                    class="tooltip copy-tooltip"
+                                                    class:show={hoveredAddress === account.mint ||
+                                                        copiedAddress === account.mint}
+                                                >
+                                                    {copiedAddress === account.mint
+                                                        ? "Copied to clipboard"
+                                                        : "Copy to clipboard"}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="amount-cell">
+                                        <span class="amount">{account.amount}</span>
+                                    </td>
+                                    <td class="action-cell">
+                                        <div class="tooltip-wrapper">
+                                            <button
+                                                class="delete-button"
+                                                on:click={() => handleDeleteClick(account.pubkey)}
+                                                role="button"
+                                                tabindex="0"
+                                            >
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    width="16"
+                                                    height="16"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                >
+                                                    <path d="M3 6h18" />
+                                                    <path
+                                                        d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"
+                                                    />
+                                                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                                                </svg>
+                                            </button>
+                                            <span class="tooltip">{@html "Delete"}</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {/each}
+                        </tbody>
+                    </table>
+                </div>
+            {/if}
+        </div>
+    {/if}
+</main>
+
+<!-- Update the confirmation dialog -->
+{#if showDeleteConfirmation}
+    <div class="popup-overlay">
+        <div class="popup-content">
+            <div class="popup-header">
+                <h2>Delete Token Account</h2>
+                <button
+                    class="close-button"
+                    on:click={() => {
+                        showDeleteConfirmation = false;
+                        tokenAccountToDelete = null;
+                        selectedPayer = "";
+                        selectedReceiver = "";
+                    }}
+                    disabled={isDeleting}
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="popup-body">
+                <p class="confirmation-message">
+                    Are you sure to delete this token account and redeem SOL?
+                </p>
+
+                <div class="form-group">
+                    <label for="payer">Payer Account</label>
+                    <select
+                        id="payer"
+                        bind:value={selectedPayer}
+                        class="select-input"
+                        disabled={isDeleting}
+                    >
+                        <option value="">Select Payer Account</option>
+                        {#each availableAccounts as acc}
+                            <option value={acc.public_key}>
+                                {acc.name || "Unnamed"} ({acc.public_key.slice(
+                                    0,
+                                    4
+                                )}...{acc.public_key.slice(-4)})
+                            </option>
+                        {/each}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="receiver">Receiver Account</label>
+                    <select
+                        id="receiver"
+                        bind:value={selectedReceiver}
+                        class="select-input"
+                        disabled={isDeleting}
+                    >
+                        <option value="">Select Receiver Account</option>
+                        {#each availableAccounts as acc}
+                            <option value={acc.public_key}>
+                                {acc.name || "Unnamed"} ({acc.public_key.slice(
+                                    0,
+                                    4
+                                )}...{acc.public_key.slice(-4)})
+                            </option>
+                        {/each}
+                    </select>
+                </div>
+            </div>
+
+            <div class="popup-footer">
+                <button
+                    class="button secondary"
+                    on:click={() => {
+                        showDeleteConfirmation = false;
+                        tokenAccountToDelete = null;
+                        selectedPayer = "";
+                        selectedReceiver = "";
+                    }}
+                    disabled={isDeleting}
+                >
+                    Cancel
+                </button>
+                <button
+                    class="button primary delete-button"
+                    on:click={() =>
+                        tokenAccountToDelete && deleteTokenAccount(tokenAccountToDelete)}
+                    disabled={isDeleting || !selectedPayer || !selectedReceiver}
+                >
+                    {#if isDeleting}
+                        <div class="loading-spinner"></div>
+                        <span>Deleting...</span>
+                    {:else}
+                        Delete
+                    {/if}
+                </button>
+            </div>
+        </div>
+    </div>
+{/if}
+
+<!-- Update the notification component -->
+{#if showNotification}
+    <div class="notification {notificationType}">
+        {@html notificationMessage}
+        <div class="progress-bar">
+            <div class="progress-bar-fill" style="width: {progress}%"></div>
+        </div>
+    </div>
+{/if}
+
+<style>
+    .container {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .header {
+        margin-bottom: 2rem;
+    }
+
+    .account-details {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .detail-group {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.75rem;
+        align-items: flex-start;
+    }
+
+    .detail-item {
+        display: flex;
+        flex-direction: column;
+        height: 42px;
+        flex: 0 0 auto;
+        margin-right: 1rem;
+        justify-content: space-between;
+    }
+
+    .detail-item label {
+        font-size: 0.875rem;
+        color: #666;
+        font-weight: 500;
+        line-height: 1;
+    }
+
+    .value-container {
+        height: 24px;
+        display: flex;
+        align-items: center;
+    }
+
+    .value,
+    .status-text {
+        font-size: 1rem;
+        line-height: 1;
+    }
+
+    .balance-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        height: 24px;
+    }
+
+    .address {
+        font-family: monospace;
+        word-break: break-all;
+    }
+
+    .status-text {
+        font-weight: 500;
+        font-size: 1rem;
+        line-height: 1;
+    }
+
+    .status-text.enabled {
+        color: rgb(34, 197, 94);
+    }
+
+    .status-text.disabled {
+        color: rgb(239, 68, 68);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .status-text.enabled {
+            color: rgb(74, 222, 128);
+        }
+
+        .status-text.disabled {
+            color: rgb(248, 113, 113);
+        }
+    }
+
+    .loading-state {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        padding: 2rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+    }
+
+    .error-state {
+        text-align: center;
+        padding: 3rem;
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+        border-radius: 12px;
+    }
+
+    .skeleton {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: loading 1.5s infinite;
+        border-radius: 4px;
+    }
+
+    .skeleton-text {
+        height: 1em;
+    }
+
+    @keyframes loading {
+        0% {
+            background-position: 200% 0;
+        }
+        100% {
+            background-position: -200% 0;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .detail-item label {
+            color: #999;
+        }
+
+        .skeleton {
+            background: linear-gradient(90deg, #222 25%, #333 50%, #222 75%);
+            background-size: 200% 100%;
+        }
+
+        .account-details {
+            background: rgba(255, 255, 255, 0.03);
+        }
+    }
+
+    .refresh-button {
+        background: none;
+        border: none;
+        padding: 2px;
+        height: 20px;
+        width: 20px;
+        cursor: pointer;
+        color: #666;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .refresh-button:hover {
+        color: #396cd8;
+        background-color: rgba(57, 108, 216, 0.1);
+    }
+
+    .refresh-button:active {
+        transform: scale(0.95);
+    }
+
+    .error-text {
+        color: #ef4444;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .refresh-button {
+            color: #999;
+        }
+
+        .refresh-button:hover {
+            color: #4a7be0;
+            background-color: rgba(74, 123, 224, 0.1);
+        }
+
+        .error-text {
+            color: #f87171;
+        }
+    }
+
+    .token-accounts-section {
+        margin-top: 2rem;
+    }
+
+    .token-accounts-section h2 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        color: #666;
+        gap: 1rem;
+    }
+
+    .empty-state svg {
+        color: #666;
+    }
+
+    .empty-state p {
+        font-size: 1rem;
+        text-align: center;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .empty-state {
+            background: rgba(255, 255, 255, 0.03);
+            color: #999;
+        }
+
+        .empty-state svg {
+            color: #999;
+        }
+    }
+
+    .token-accounts-table-container {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        overflow-x: auto;
+    }
+
+    .token-accounts-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+
+    .token-accounts-table th {
+        text-align: center;
+        padding: 1rem;
+        font-weight: 500;
+        color: #666;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .token-accounts-table th:first-child {
+        text-align: left;
+    }
+
+    .token-accounts-table th:nth-child(4) {
+        text-align: left;
+        padding-left: 1rem;
+    }
+
+    .token-accounts-table td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .token-accounts-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .address-cell {
+        min-width: 300px;
+        font-family: monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .token-accounts-table th {
+            color: #999;
+        }
+
+        .token-accounts-table-container {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .token-accounts-table td {
+            border-bottom-color: rgba(255, 255, 255, 0.03);
+        }
+    }
+
+    .amount-cell {
+        min-width: 120px;
+        text-align: left;
+        padding-left: 1rem;
+        font-family: monospace;
+    }
+
+    .amount {
+        font-size: 0.875rem;
+        display: block;
+        text-align: left;
+        width: 100%;
+    }
+
+    .token-cell {
+        min-width: 150px;
+        padding-right: 1rem;
+    }
+
+    .token-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex: 1;
+    }
+
+    .token-logo {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .token-symbol {
+        font-weight: 500;
+        font-size: 0.875rem;
+    }
+
+    .token-cell-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .token-info.clickable {
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 4px;
+        transition: background-color 0.2s;
+    }
+
+    .token-info.clickable:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .token-info.clickable:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+    }
+
+    .tooltip-wrapper {
+        position: relative;
+        display: inline-block;
+    }
+
+    .tooltip {
+        visibility: hidden;
+        position: absolute;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        z-index: 1;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .tooltip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+    }
+
+    .tooltip-wrapper:hover .tooltip {
+        visibility: visible;
+        opacity: 1;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .tooltip {
+            background: rgba(0, 0, 0, 0.9);
+        }
+
+        .tooltip::after {
+            border-color: rgba(0, 0, 0, 0.9) transparent transparent transparent;
+        }
+    }
+
+    .action-cell {
+        width: 48px;
+        text-align: center;
+        padding: 0 0.5rem;
+    }
+
+    .delete-button {
+        background: none;
+        border: none;
+        padding: 0.25rem;
+        cursor: pointer;
+        color: #666;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .delete-button:hover {
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+    }
+
+    .delete-button:active {
+        transform: scale(0.95);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .delete-button {
+            color: #999;
+        }
+
+        .delete-button:hover {
+            color: #f87171;
+            background: rgba(248, 113, 113, 0.1);
+        }
+    }
+
+    /* Update the confirmation dialog styles */
+    .popup-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .popup-content {
+        background: #ffffff;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 480px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+        animation: slideUp 0.2s ease-out;
+    }
+
+    .popup-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .popup-header h2 {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .close-button {
+        background: none;
+        border: none;
+        padding: 0.5rem;
+        margin: -0.5rem;
+        cursor: pointer;
+        color: #666;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .close-button:hover:not(:disabled) {
+        background: rgba(0, 0, 0, 0.05);
+        color: #333;
+    }
+
+    .close-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .popup-body {
+        padding: 1.5rem;
+    }
+
+    .confirmation-message {
+        margin: 0 0 1.5rem 0;
+        color: #666;
+        font-size: 0.9375rem;
+    }
+
+    .popup-footer {
+        padding: 1.25rem 1.5rem;
+        border-top: 1px solid #eee;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+
+    .button {
+        padding: 0.625rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+        border: none;
+        gap: 0.5rem;
+        min-width: 5rem;
+    }
+
+    .button.secondary {
+        background: rgba(0, 0, 0, 0.05);
+        color: #666;
+    }
+
+    .button.secondary:hover:not(:disabled) {
+        background: rgba(0, 0, 0, 0.08);
+    }
+
+    .button.primary {
+        background: #4a7be0;
+        color: white;
+    }
+
+    .button.primary:hover:not(:disabled) {
+        background: #3d69c7;
+    }
+
+    .button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .delete-button {
+        background: #dc2626;
+    }
+
+    .delete-button:hover:not(:disabled) {
+        background: #b91c1c;
+    }
+
+    .loading-spinner {
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @keyframes slideUp {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .popup-content {
+            background: #1a1a1a;
+        }
+
+        .popup-header {
+            border-bottom-color: #333;
+        }
+
+        .popup-header h2 {
+            color: #fff;
+        }
+
+        .close-button {
+            color: #999;
+        }
+
+        .close-button:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .confirmation-message {
+            color: #999;
+        }
+
+        .popup-footer {
+            border-top-color: #333;
+        }
+
+        .button.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .button.secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.15);
+        }
+    }
+
+    /* Update notification styles to handle links */
+    .notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .notification a {
+        color: white;
+        text-decoration: underline;
+        opacity: 0.9;
+    }
+
+    .notification a:hover {
+        opacity: 1;
+        text-decoration: none;
+    }
+
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .notification.success {
+            background-color: #2ea043;
+        }
+
+        .notification.error {
+            background-color: #da3633;
+        }
+    }
+
+    /* Add loading spinner styles */
+    .loading-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #ffffff;
+        border-top-color: transparent;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* Update button styles */
+    .popup-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 24px;
+        font-size: 1.1em;
+        font-weight: 500;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        min-width: 120px;
+    }
+
+    .popup-button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .delete-button-confirm:disabled {
+        background-color: #dc3545;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .delete-button-confirm:disabled {
+            background-color: #dc3545;
+            opacity: 0.7;
+        }
+    }
+
+    /* Add progress bar styles */
+    .notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .progress-bar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 0 0 8px 8px;
+        overflow: hidden;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background: rgba(255, 255, 255, 0.7);
+        border-radius: 0 0 8px 8px;
+        transition: width 100ms linear;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .progress-bar {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .progress-bar-fill {
+            background: rgba(255, 255, 255, 0.5);
+        }
+    }
+
+    .address-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .copy-button {
+        background: none;
+        border: none;
+        padding: 0.25rem;
+        cursor: pointer;
+        color: #666;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+        opacity: 0.5;
+    }
+
+    .address-wrapper:hover .copy-button {
+        opacity: 1;
+    }
+
+    .copy-button:hover {
+        color: #4a7be0;
+        background: rgba(74, 123, 224, 0.1);
+        transform: translateY(-1px);
+    }
+
+    .copy-button:active {
+        transform: translateY(0);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .copy-button {
+            color: #999;
+        }
+
+        .copy-button:hover {
+            color: #4a7be0;
+            background: rgba(74, 123, 224, 0.1);
+        }
+    }
+
+    /* Add tooltip styles */
+    .tooltip-wrapper {
+        position: relative;
+    }
+
+    .copy-tooltip {
+        position: absolute;
+        top: -30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+    }
+
+    .copy-tooltip.show {
+        opacity: 1;
+    }
+
+    .copy-tooltip::after {
+        content: "";
+        position: absolute;
+        bottom: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-width: 4px 4px 0 4px;
+        border-style: solid;
+        border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .copy-tooltip {
+            background: rgba(255, 255, 255, 0.9);
+            color: black;
+        }
+
+        .copy-tooltip::after {
+            border-color: rgba(255, 255, 255, 0.9) transparent transparent transparent;
+        }
+    }
+
+    /* Add styles for the address link */
+    .address-link {
+        color: inherit;
+        text-decoration: none;
+        transition: color 0.2s ease-in-out;
+    }
+
+    .address-link:hover {
+        color: #4a7be0;
+    }
+
+    /* Update address wrapper to handle link */
+    .address-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        max-width: 100%;
+    }
+
+    .address {
+        font-family: monospace;
+        word-break: break-all;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .address-link:hover {
+            color: #6d9aec;
+        }
+    }
+
+    /* Add styles for the form elements */
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #666;
+    }
+
+    .select-input {
+        width: 100%;
+        padding: 0.625rem 0.75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background-color: white;
+        font-size: 0.875rem;
+        color: #333;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        padding-right: 2.5rem;
+    }
+
+    .select-input:hover:not(:disabled) {
+        border-color: #cbd5e1;
+    }
+
+    .select-input:focus {
+        outline: none;
+        border-color: #4a7be0;
+        box-shadow: 0 0 0 2px rgba(74, 123, 224, 0.1);
+    }
+
+    .select-input:disabled {
+        background-color: #f8fafc;
+        color: #94a3b8;
+        cursor: not-allowed;
+    }
+
+    .select-input option {
+        padding: 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .form-group label {
+            color: #94a3b8;
+        }
+
+        .select-input {
+            background-color: #1e293b;
+            border-color: #334155;
+            color: #e2e8f0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        }
+
+        .select-input:hover:not(:disabled) {
+            border-color: #475569;
+        }
+
+        .select-input:focus {
+            border-color: #4a7be0;
+            box-shadow: 0 0 0 2px rgba(74, 123, 224, 0.2);
+        }
+
+        .select-input:disabled {
+            background-color: #0f172a;
+            border-color: #1e293b;
+            color: #475569;
+        }
+
+        .select-input option {
+            background-color: #1e293b;
+            color: #e2e8f0;
+        }
+    }
+</style>
