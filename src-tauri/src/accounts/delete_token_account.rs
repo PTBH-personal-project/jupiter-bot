@@ -17,6 +17,8 @@ pub async fn delete_token_account(
     state: State<'_, AppState>,
     owner: String,
     token_account_pubkey: String,
+    payer: String,
+    receiver: String,
 ) -> Result<String, String> {
     // Parse the token account pubkey
     let owner_pubkey = Pubkey::from_str(&owner).map_err(|e| e.to_string())?;
@@ -27,16 +29,10 @@ pub async fn delete_token_account(
     let rpc_client = &state.rpc_client;
     let db = &state.db;
 
-    let owner_account = get_account_from_public_key(db, &owner)
-        .await
-        .map_err(|e| e.to_string())?;
-    if owner_account.is_none() {
-        return Err("Owner account not found".to_string());
-    }
-
-    let owner_keypair = Keypair::from_base58_string(&owner_account.unwrap().private_key);
-    let receiver_pubkey = Pubkey::from_str("4bPLCzXqDiDukQuRxkWz6n2Dw47iwDQjkaqngCspSSFF")
+    let receiver_pubkey = Pubkey::from_str(&receiver)
         .map_err(|e| format!("Failed to parse receiver pubkey: {}", e))?;
+    let payer_pubkey =
+        Pubkey::from_str(&payer).map_err(|e| format!("Failed to parse payer pubkey: {}", e))?;
 
     println!("token_account_pubkey: {:?}", token_account_pubkey);
     let token_account_data = rpc_client
@@ -44,6 +40,22 @@ pub async fn delete_token_account(
         .map_err(|e| format!("Failed to get token account: {}", e))?
         .unwrap();
 
+    let owner_account = get_account_from_public_key(db, &owner)
+        .await
+        .map_err(|e| e.to_string())?;
+    if owner_account.is_none() {
+        return Err("Owner account not found".to_string());
+    }
+    let payer_account = get_account_from_public_key(db, &payer)
+        .await
+        .map_err(|e| e.to_string())?;
+    if payer_account.is_none() {
+        return Err("Payer account not found".to_string());
+    }
+
+    let owner_keypair = Keypair::from_base58_string(&owner_account.unwrap().private_key);
+    let payer_keypair = Keypair::from_base58_string(&payer_account.unwrap().private_key);
+    println!("Get keypair success");
     // Create the close account instruction
     let burn_amount_instruction = token_instruction::burn(
         &spl_token::id(),
@@ -66,17 +78,21 @@ pub async fn delete_token_account(
         &owner_pubkey,
         &[&owner_pubkey],
     )
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| format!("Failed to create close instruction: {}", e))?;
 
     // Create and send the transaction
     let recent_blockhash = rpc_client
         .get_latest_blockhash()
         .map_err(|e| e.to_string())?;
 
+    println!("Get recent blockhash success");
+
+    println!("Build transaction");
+
     let transaction = Transaction::new_signed_with_payer(
         &[burn_amount_instruction, close_instruction],
-        Some(&owner_pubkey),
-        &[&owner_keypair],
+        Some(&payer_pubkey),
+        &[&payer_keypair, &owner_keypair],
         recent_blockhash,
     );
 

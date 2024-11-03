@@ -38,10 +38,16 @@
     let hoveredAddress = "";
     let copiedAddress = "";
 
+    // Add new state variables for payer and receiver
+    let selectedPayer = "";
+    let selectedReceiver = "";
+    let availableAccounts: Account[] = []; // This will store the list of accounts
+
     onMount(() => {
         loadAccountDetails().then(() => {
             fetchBalance();
             loadTokenAccounts();
+            loadAvailableAccounts();
         });
     });
 
@@ -145,14 +151,16 @@
         await fetchTokenInfo(mintAddress);
     }
 
-    // Update the delete function
+    // Modify the delete function to include payer and receiver
     async function deleteTokenAccount(pubkey: string) {
         try {
             isDeleting = true;
-            const txHash = await invoke("delete_token_account", {
+            const txHash = (await invoke("delete_token_account", {
                 owner: $page.params.publicKey,
                 tokenAccountPubkey: pubkey,
-            }) as string;
+                payer: selectedPayer,
+                receiver: selectedReceiver,
+            })) as string;
             // Remove the token account from the list
             tokenAccounts = tokenAccounts.filter((account) => account.pubkey !== pubkey);
             showDeleteConfirmation = false;
@@ -162,7 +170,7 @@
             notificationMessage = `Token account deleted successfully. <a href="${txLink(txHash)}" target="_blank" rel="noopener noreferrer">View transaction</a>`;
             notificationType = "success";
             showNotification = true;
-            
+
             // Clean up existing interval if any
             if (progressInterval) {
                 clearInterval(progressInterval);
@@ -180,7 +188,6 @@
                     progress -= 1.67; // 100 / (6000ms / 100ms)
                 }
             }, 100);
-
         } catch (err) {
             console.error("Error deleting token account:", err);
             notificationMessage = "Failed to delete token account";
@@ -222,6 +229,29 @@
         setTimeout(() => {
             copiedAddress = "";
         }, 1500); // Hide "copied" message after 1.5 seconds
+    }
+
+    // Add function to load available accounts
+    async function loadAvailableAccounts() {
+        try {
+            const accounts = (await invoke("get_accounts")) as Account[];
+            // Filter out any null or undefined values and ensure proper typing
+            availableAccounts = accounts.filter(
+                (account): account is Account =>
+                    account != null &&
+                    typeof account.public_key === "string" &&
+                    typeof account.name === "string"
+            );
+
+            // Set default payer to current account if it exists
+            if (account && account.public_key) {
+                selectedPayer = account.public_key;
+            }
+        } catch (err) {
+            console.error("Error loading available accounts:", err);
+            // Initialize with empty array on error
+            availableAccounts = [];
+        }
     }
 </script>
 
@@ -396,20 +426,21 @@
                                     </td>
                                     <td class="address-cell">
                                         <div class="address-wrapper">
-                                            <a 
-                                                href={addressLink(account.pubkey)} 
-                                                target="_blank" 
+                                            <a
+                                                href={addressLink(account.pubkey)}
+                                                target="_blank"
                                                 rel="noopener noreferrer"
                                                 class="address-link"
                                             >
                                                 <span class="address">{account.pubkey}</span>
                                             </a>
                                             <div class="tooltip-wrapper">
-                                                <button 
-                                                    class="copy-button" 
+                                                <button
+                                                    class="copy-button"
                                                     on:click={() => copyToClipboard(account.pubkey)}
-                                                    on:mouseenter={() => hoveredAddress = account.pubkey}
-                                                    on:mouseleave={() => hoveredAddress = ""}
+                                                    on:mouseenter={() =>
+                                                        (hoveredAddress = account.pubkey)}
+                                                    on:mouseleave={() => (hoveredAddress = "")}
                                                 >
                                                     <svg
                                                         xmlns="http://www.w3.org/2000/svg"
@@ -422,35 +453,48 @@
                                                         stroke-linecap="round"
                                                         stroke-linejoin="round"
                                                     >
-                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                                        <rect
+                                                            x="9"
+                                                            y="9"
+                                                            width="13"
+                                                            height="13"
+                                                            rx="2"
+                                                            ry="2"
+                                                        />
+                                                        <path
+                                                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                                        />
                                                     </svg>
                                                 </button>
-                                                <span 
-                                                    class="tooltip copy-tooltip" 
-                                                    class:show={hoveredAddress === account.pubkey || copiedAddress === account.pubkey}
+                                                <span
+                                                    class="tooltip copy-tooltip"
+                                                    class:show={hoveredAddress === account.pubkey ||
+                                                        copiedAddress === account.pubkey}
                                                 >
-                                                    {copiedAddress === account.pubkey ? 'Copied to clipboard' : 'Copy to clipboard'}
+                                                    {copiedAddress === account.pubkey
+                                                        ? "Copied to clipboard"
+                                                        : "Copy to clipboard"}
                                                 </span>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="address-cell">
                                         <div class="address-wrapper">
-                                            <a 
-                                                href={addressLink(account.mint)} 
-                                                target="_blank" 
+                                            <a
+                                                href={addressLink(account.mint)}
+                                                target="_blank"
                                                 rel="noopener noreferrer"
                                                 class="address-link"
                                             >
                                                 <span class="address">{account.mint}</span>
                                             </a>
                                             <div class="tooltip-wrapper">
-                                                <button 
+                                                <button
                                                     class="copy-button"
                                                     on:click={() => copyToClipboard(account.mint)}
-                                                    on:mouseenter={() => hoveredAddress = account.mint}
-                                                    on:mouseleave={() => hoveredAddress = ""}
+                                                    on:mouseenter={() =>
+                                                        (hoveredAddress = account.mint)}
+                                                    on:mouseleave={() => (hoveredAddress = "")}
                                                 >
                                                     <svg
                                                         xmlns="http://www.w3.org/2000/svg"
@@ -463,15 +507,27 @@
                                                         stroke-linecap="round"
                                                         stroke-linejoin="round"
                                                     >
-                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                                        <rect
+                                                            x="9"
+                                                            y="9"
+                                                            width="13"
+                                                            height="13"
+                                                            rx="2"
+                                                            ry="2"
+                                                        />
+                                                        <path
+                                                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                                        />
                                                     </svg>
                                                 </button>
-                                                <span 
-                                                    class="tooltip copy-tooltip" 
-                                                    class:show={hoveredAddress === account.mint || copiedAddress === account.mint}
+                                                <span
+                                                    class="tooltip copy-tooltip"
+                                                    class:show={hoveredAddress === account.mint ||
+                                                        copiedAddress === account.mint}
                                                 >
-                                                    {copiedAddress === account.mint ? 'Copied to clipboard' : 'Copy to clipboard'}
+                                                    {copiedAddress === account.mint
+                                                        ? "Copied to clipboard"
+                                                        : "Copy to clipboard"}
                                                 </span>
                                             </div>
                                         </div>
@@ -521,24 +577,100 @@
 <!-- Update the confirmation dialog -->
 {#if showDeleteConfirmation}
     <div class="popup-overlay">
-        <div class="popup-content confirm-dialog">
-            <h2>Delete Token Account</h2>
-            <p>Are you sure to delete this token account and redeem SOL?</p>
-            <div class="button-group">
-                <button 
-                    class="popup-button cancel-button"
+        <div class="popup-content">
+            <div class="popup-header">
+                <h2>Delete Token Account</h2>
+                <button
+                    class="close-button"
                     on:click={() => {
                         showDeleteConfirmation = false;
                         tokenAccountToDelete = null;
+                        selectedPayer = "";
+                        selectedReceiver = "";
+                    }}
+                    disabled={isDeleting}
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="popup-body">
+                <p class="confirmation-message">
+                    Are you sure to delete this token account and redeem SOL?
+                </p>
+
+                <div class="form-group">
+                    <label for="payer">Payer Account</label>
+                    <select
+                        id="payer"
+                        bind:value={selectedPayer}
+                        class="select-input"
+                        disabled={isDeleting}
+                    >
+                        <option value="">Select Payer Account</option>
+                        {#each availableAccounts as acc}
+                            <option value={acc.public_key}>
+                                {acc.name || "Unnamed"} ({acc.public_key.slice(
+                                    0,
+                                    4
+                                )}...{acc.public_key.slice(-4)})
+                            </option>
+                        {/each}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="receiver">Receiver Account</label>
+                    <select
+                        id="receiver"
+                        bind:value={selectedReceiver}
+                        class="select-input"
+                        disabled={isDeleting}
+                    >
+                        <option value="">Select Receiver Account</option>
+                        {#each availableAccounts as acc}
+                            <option value={acc.public_key}>
+                                {acc.name || "Unnamed"} ({acc.public_key.slice(
+                                    0,
+                                    4
+                                )}...{acc.public_key.slice(-4)})
+                            </option>
+                        {/each}
+                    </select>
+                </div>
+            </div>
+
+            <div class="popup-footer">
+                <button
+                    class="button secondary"
+                    on:click={() => {
+                        showDeleteConfirmation = false;
+                        tokenAccountToDelete = null;
+                        selectedPayer = "";
+                        selectedReceiver = "";
                     }}
                     disabled={isDeleting}
                 >
                     Cancel
                 </button>
-                <button 
-                    class="popup-button delete-button-confirm"
-                    on:click={() => tokenAccountToDelete && deleteTokenAccount(tokenAccountToDelete)}
-                    disabled={isDeleting}
+                <button
+                    class="button primary delete-button"
+                    on:click={() =>
+                        tokenAccountToDelete && deleteTokenAccount(tokenAccountToDelete)}
+                    disabled={isDeleting || !selectedPayer || !selectedReceiver}
                 >
                     {#if isDeleting}
                         <div class="loading-spinner"></div>
@@ -557,10 +689,7 @@
     <div class="notification {notificationType}">
         {@html notificationMessage}
         <div class="progress-bar">
-            <div 
-                class="progress-bar-fill" 
-                style="width: {progress}%"
-            ></div>
+            <div class="progress-bar-fill" style="width: {progress}%"></div>
         </div>
     </div>
 {/if}
@@ -1007,7 +1136,8 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
         display: flex;
         justify-content: center;
         align-items: center;
@@ -1015,80 +1145,180 @@
     }
 
     .popup-content {
-        background-color: #fff;
-        padding: 20px;
-        border-radius: 8px;
-        width: 80%;
-        max-width: 400px;
+        background: #ffffff;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 480px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+        animation: slideUp 0.2s ease-out;
     }
 
-    .popup-content h2 {
-        margin: 0 0 1rem 0;
-        font-size: 1.25rem;
-    }
-
-    .popup-content p {
-        margin: 0 0 1.5rem 0;
-        color: #666;
-    }
-
-    .button-group {
+    .popup-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #eee;
         display: flex;
-        justify-content: flex-end;
-        gap: 1rem;
+        justify-content: space-between;
+        align-items: center;
     }
 
-    .popup-button {
-        display: inline-flex;
+    .popup-header h2 {
+        margin: 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    .close-button {
+        background: none;
+        border: none;
+        padding: 0.5rem;
+        margin: -0.5rem;
+        cursor: pointer;
+        color: #666;
+        border-radius: 6px;
+        display: flex;
         align-items: center;
         justify-content: center;
-        padding: 12px 24px;
-        font-size: 1.1em;
-        font-weight: 500;
-        border-radius: 8px;
-        border: 1px solid transparent;
-        cursor: pointer;
         transition: all 0.2s ease-in-out;
-        min-width: 120px;
     }
 
-    .popup-button:disabled {
-        opacity: 0.7;
+    .close-button:hover:not(:disabled) {
+        background: rgba(0, 0, 0, 0.05);
+        color: #333;
+    }
+
+    .close-button:disabled {
+        opacity: 0.5;
         cursor: not-allowed;
     }
 
-    .delete-button-confirm {
-        background-color: #dc3545;
+    .popup-body {
+        padding: 1.5rem;
+    }
+
+    .confirmation-message {
+        margin: 0 0 1.5rem 0;
+        color: #666;
+        font-size: 0.9375rem;
+    }
+
+    .popup-footer {
+        padding: 1.25rem 1.5rem;
+        border-top: 1px solid #eee;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+
+    .button {
+        padding: 0.625rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+        border: none;
+        gap: 0.5rem;
+        min-width: 5rem;
+    }
+
+    .button.secondary {
+        background: rgba(0, 0, 0, 0.05);
+        color: #666;
+    }
+
+    .button.secondary:hover:not(:disabled) {
+        background: rgba(0, 0, 0, 0.08);
+    }
+
+    .button.primary {
+        background: #4a7be0;
         color: white;
     }
 
-    .delete-button-confirm:hover {
-        background-color: #c82333;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    .button.primary:hover:not(:disabled) {
+        background: #3d69c7;
     }
 
-    .delete-button-confirm:active {
-        transform: translateY(0);
-        background-color: #bd2130;
+    .button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .delete-button {
+        background: #dc2626;
+    }
+
+    .delete-button:hover:not(:disabled) {
+        background: #b91c1c;
+    }
+
+    .loading-spinner {
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @keyframes slideUp {
+        from {
+            transform: translateY(20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
     }
 
     @media (prefers-color-scheme: dark) {
         .popup-content {
-            background-color: #2f2f2f;
-            color: #f6f6f6;
+            background: #1a1a1a;
         }
 
-        .popup-content p {
-            color: #9ca3af;
+        .popup-header {
+            border-bottom-color: #333;
         }
 
-        .delete-button-confirm {
-            background-color: #dc3545;
+        .popup-header h2 {
+            color: #fff;
         }
 
-        .delete-button-confirm:hover {
-            background-color: #bd2130;
+        .close-button {
+            color: #999;
+        }
+
+        .close-button:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .confirmation-message {
+            color: #999;
+        }
+
+        .popup-footer {
+            border-top-color: #333;
+        }
+
+        .button.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .button.secondary:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.15);
         }
     }
 
@@ -1300,7 +1530,7 @@
     }
 
     .copy-tooltip::after {
-        content: '';
+        content: "";
         position: absolute;
         bottom: -4px;
         left: 50%;
@@ -1350,6 +1580,92 @@
     @media (prefers-color-scheme: dark) {
         .address-link:hover {
             color: #6d9aec;
+        }
+    }
+
+    /* Add styles for the form elements */
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #666;
+    }
+
+    .select-input {
+        width: 100%;
+        padding: 0.625rem 0.75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background-color: white;
+        font-size: 0.875rem;
+        color: #333;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        padding-right: 2.5rem;
+    }
+
+    .select-input:hover:not(:disabled) {
+        border-color: #cbd5e1;
+    }
+
+    .select-input:focus {
+        outline: none;
+        border-color: #4a7be0;
+        box-shadow: 0 0 0 2px rgba(74, 123, 224, 0.1);
+    }
+
+    .select-input:disabled {
+        background-color: #f8fafc;
+        color: #94a3b8;
+        cursor: not-allowed;
+    }
+
+    .select-input option {
+        padding: 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .form-group label {
+            color: #94a3b8;
+        }
+
+        .select-input {
+            background-color: #1e293b;
+            border-color: #334155;
+            color: #e2e8f0;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        }
+
+        .select-input:hover:not(:disabled) {
+            border-color: #475569;
+        }
+
+        .select-input:focus {
+            border-color: #4a7be0;
+            box-shadow: 0 0 0 2px rgba(74, 123, 224, 0.2);
+        }
+
+        .select-input:disabled {
+            background-color: #0f172a;
+            border-color: #1e293b;
+            color: #475569;
+        }
+
+        .select-input option {
+            background-color: #1e293b;
+            color: #e2e8f0;
         }
     }
 </style>
