@@ -204,6 +204,7 @@
                             <tr>
                                 <th>Token Account</th>
                                 <th>Mint</th>
+                                <th>Amount</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -214,6 +215,9 @@
                                     </td>
                                     <td class="address-cell">
                                         <span class="address">{account.mint}</span>
+                                    </td>
+                                    <td class="amount-cell">
+                                        <span class="amount">{account.amount}</span>
                                     </td>
                                 </tr>
                             {/each}
@@ -500,5 +504,16 @@
         .token-accounts-table td {
             border-bottom-color: rgba(255, 255, 255, 0.03);
         }
+    }
+
+    .amount-cell {
+        min-width: 120px;
+        text-align: right;
+        padding-right: 2rem;
+        font-family: monospace;
+    }
+
+    .amount {
+        font-size: 0.875rem;
     }
 </style>

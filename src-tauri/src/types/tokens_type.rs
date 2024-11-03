@@ -16,4 +16,5 @@ pub struct TokenInfo {
 pub struct TokenAccount {
     pub pubkey: String,
     pub mint: String,
+    pub amount: String,
 }

@@ -49,22 +49,41 @@ pub async fn get_all_token_account_for_pubkey(
     println!("token_accounts: {:?}", keyed_token_accounts);
     let mut token_accounts = Vec::new();
     for account in keyed_token_accounts.iter() {
-        let mint = match &account.account.data {
-            UiAccountData::Json(parsed) => parsed
-                .parsed
-                .get("info")
-                .unwrap()
-                .get("mint")
-                .unwrap()
-                .to_string()
-                .trim_matches('"')
-                .to_string(),
-            _ => Pubkey::default().to_string(),
+        let token_account = match &account.account.data {
+            UiAccountData::Json(parsed) => {
+                let parsed_info = parsed.parsed.get("info").unwrap();
+                parsed
+                    .parsed
+                    .get("info")
+                    .unwrap()
+                    .get("tokenAmount")
+                    .unwrap()
+                    .to_string();
+                TokenAccount {
+                    pubkey: account.pubkey.to_string(),
+                    mint: parsed_info
+                        .get("mint")
+                        .unwrap()
+                        .to_string()
+                        .trim_matches('"')
+                        .to_string(),
+                    amount: parsed_info
+                        .get("tokenAmount")
+                        .unwrap()
+                        .get("uiAmountString")
+                        .unwrap()
+                        .to_string()
+                        .trim_matches('"')
+                        .to_string(),
+                }
+            }
+            _ => TokenAccount {
+                pubkey: account.pubkey.to_string(),
+                mint: Pubkey::default().to_string(),
+                amount: "0".to_string(),
+            },
         };
-        token_accounts.push(TokenAccount {
-            pubkey: account.pubkey.to_string(),
-            mint: mint.clone(),
-        });
+        token_accounts.push(token_account);
     }
 
     Ok(token_accounts)
