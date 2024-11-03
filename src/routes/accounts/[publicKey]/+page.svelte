@@ -4,6 +4,7 @@
     import { onMount } from "svelte";
     import type { Account } from "../../../types/accounts";
     import type { TokenAccount, TokenInfo } from "../../../types/tokens";
+    import { txLink, addressLink } from "$lib/utils/link_utils";
 
     const publicKey = $page.params.publicKey;
     let account: Account | null = null;
@@ -32,6 +33,10 @@
     // Add progress state
     let progress = 100;
     let progressInterval: ReturnType<typeof setInterval> | null = null;
+
+    // Add state for copy tooltip
+    let hoveredAddress = "";
+    let copiedAddress = "";
 
     onMount(() => {
         loadAccountDetails().then(() => {
@@ -147,14 +152,14 @@
             const txHash = await invoke("delete_token_account", {
                 owner: $page.params.publicKey,
                 tokenAccountPubkey: pubkey,
-            });
+            }) as string;
             // Remove the token account from the list
             tokenAccounts = tokenAccounts.filter((account) => account.pubkey !== pubkey);
             showDeleteConfirmation = false;
             tokenAccountToDelete = null;
 
             // Show success notification with link
-            notificationMessage = `Token account deleted successfully. <a href="https://explorer.solana.com/tx/${txHash}" target="_blank" rel="noopener noreferrer">View transaction</a>`;
+            notificationMessage = `Token account deleted successfully. <a href="${txLink(txHash)}" target="_blank" rel="noopener noreferrer">View transaction</a>`;
             notificationType = "success";
             showNotification = true;
             
@@ -208,6 +213,15 @@
     function handleDeleteClick(pubkey: string) {
         tokenAccountToDelete = pubkey;
         showDeleteConfirmation = true;
+    }
+
+    // Function to handle copy with tooltip
+    function copyToClipboard(text: string) {
+        navigator.clipboard.writeText(text);
+        copiedAddress = text;
+        setTimeout(() => {
+            copiedAddress = "";
+        }, 1500); // Hide "copied" message after 1.5 seconds
     }
 </script>
 
@@ -381,10 +395,86 @@
                                         {/if}
                                     </td>
                                     <td class="address-cell">
-                                        <span class="address">{account.pubkey}</span>
+                                        <div class="address-wrapper">
+                                            <a 
+                                                href={addressLink(account.pubkey)} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                class="address-link"
+                                            >
+                                                <span class="address">{account.pubkey}</span>
+                                            </a>
+                                            <div class="tooltip-wrapper">
+                                                <button 
+                                                    class="copy-button" 
+                                                    on:click={() => copyToClipboard(account.pubkey)}
+                                                    on:mouseenter={() => hoveredAddress = account.pubkey}
+                                                    on:mouseleave={() => hoveredAddress = ""}
+                                                >
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        width="14"
+                                                        height="14"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                    >
+                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                                    </svg>
+                                                </button>
+                                                <span 
+                                                    class="tooltip copy-tooltip" 
+                                                    class:show={hoveredAddress === account.pubkey || copiedAddress === account.pubkey}
+                                                >
+                                                    {copiedAddress === account.pubkey ? 'Copied to clipboard' : 'Copy to clipboard'}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td class="address-cell">
-                                        <span class="address">{account.mint}</span>
+                                        <div class="address-wrapper">
+                                            <a 
+                                                href={addressLink(account.mint)} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                class="address-link"
+                                            >
+                                                <span class="address">{account.mint}</span>
+                                            </a>
+                                            <div class="tooltip-wrapper">
+                                                <button 
+                                                    class="copy-button"
+                                                    on:click={() => copyToClipboard(account.mint)}
+                                                    on:mouseenter={() => hoveredAddress = account.mint}
+                                                    on:mouseleave={() => hoveredAddress = ""}
+                                                >
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        width="14"
+                                                        height="14"
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        stroke-width="2"
+                                                        stroke-linecap="round"
+                                                        stroke-linejoin="round"
+                                                    >
+                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                                    </svg>
+                                                </button>
+                                                <span 
+                                                    class="tooltip copy-tooltip" 
+                                                    class:show={hoveredAddress === account.mint || copiedAddress === account.mint}
+                                                >
+                                                    {copiedAddress === account.mint ? 'Copied to clipboard' : 'Copy to clipboard'}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td class="amount-cell">
                                         <span class="amount">{account.amount}</span>
@@ -1136,6 +1226,130 @@
 
         .progress-bar-fill {
             background: rgba(255, 255, 255, 0.5);
+        }
+    }
+
+    .address-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .copy-button {
+        background: none;
+        border: none;
+        padding: 0.25rem;
+        cursor: pointer;
+        color: #666;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease-in-out;
+        opacity: 0.5;
+    }
+
+    .address-wrapper:hover .copy-button {
+        opacity: 1;
+    }
+
+    .copy-button:hover {
+        color: #4a7be0;
+        background: rgba(74, 123, 224, 0.1);
+        transform: translateY(-1px);
+    }
+
+    .copy-button:active {
+        transform: translateY(0);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .copy-button {
+            color: #999;
+        }
+
+        .copy-button:hover {
+            color: #4a7be0;
+            background: rgba(74, 123, 224, 0.1);
+        }
+    }
+
+    /* Add tooltip styles */
+    .tooltip-wrapper {
+        position: relative;
+    }
+
+    .copy-tooltip {
+        position: absolute;
+        top: -30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+    }
+
+    .copy-tooltip.show {
+        opacity: 1;
+    }
+
+    .copy-tooltip::after {
+        content: '';
+        position: absolute;
+        bottom: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-width: 4px 4px 0 4px;
+        border-style: solid;
+        border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .copy-tooltip {
+            background: rgba(255, 255, 255, 0.9);
+            color: black;
+        }
+
+        .copy-tooltip::after {
+            border-color: rgba(255, 255, 255, 0.9) transparent transparent transparent;
+        }
+    }
+
+    /* Add styles for the address link */
+    .address-link {
+        color: inherit;
+        text-decoration: none;
+        transition: color 0.2s ease-in-out;
+    }
+
+    .address-link:hover {
+        color: #4a7be0;
+    }
+
+    /* Update address wrapper to handle link */
+    .address-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        max-width: 100%;
+    }
+
+    .address {
+        font-family: monospace;
+        word-break: break-all;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .address-link:hover {
+            color: #6d9aec;
         }
     }
 </style>
