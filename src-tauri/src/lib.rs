@@ -52,6 +52,7 @@ pub async fn run() {
             capitalize,
             import_account,
             get_accounts,
+            get_account_by_public_key,
             delete_account,
             toggle_account_status,
             update_account,
