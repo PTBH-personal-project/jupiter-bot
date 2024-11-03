@@ -74,10 +74,11 @@
                 symbol: tokenInfo.symbol,
                 decimals: tokenInfo.decimals,
                 name: tokenInfo.name,
-                logoUri: tokenInfo.logoUri,
+                logoUri: logoUri,
                 uri: tokenInfo.uri,
             });
             showNotification("Token imported successfully!");
+            closeDialog();
         } catch (err) {
             console.error("Error importing token:", err);
             showNotification("Failed to import token: " + err, true);
@@ -106,6 +107,8 @@
         address = "";
         error = null;
         tokenInfo = null;
+        tokenPrice = null;
+        logoUri = "";
     }
 </script>
 
