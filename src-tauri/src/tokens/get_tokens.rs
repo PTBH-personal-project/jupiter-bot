@@ -1,10 +1,10 @@
 use crate::types::*;
 
 #[tauri::command]
-pub async fn get_all_tokens(state: tauri::State<'_, AppState>) -> Result<Vec<TokenInfoDb>, String> {
+pub async fn get_all_tokens(state: tauri::State<'_, AppState>) -> Result<Vec<TokenInfo>, String> {
     let db = &state.db;
 
-    let tokens = sqlx::query_as::<_, TokenInfoDb>(
+    let tokens = sqlx::query_as::<_, TokenInfo>(
         r#"
         SELECT *
         FROM tokens

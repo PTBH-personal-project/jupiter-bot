@@ -1,6 +1,7 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
     import type { TokenInfo } from "../../types/tokens";
+    import { onMount } from "svelte";
 
     let showImportDialog = false;
     let address = "";
@@ -16,6 +17,21 @@
         message: "",
         isError: false,
     };
+
+    let tokens: TokenInfo[] = [];
+
+    onMount(async () => {
+        await loadTokens();
+    });
+
+    async function loadTokens() {
+        try {
+            tokens = await invoke("get_all_tokens");
+        } catch (err) {
+            console.error("Error loading tokens:", err);
+            showNotification("Failed to load tokens: " + err, true);
+        }
+    }
 
     async function fetchPrice() {
         if (!tokenInfo) return;
@@ -76,7 +92,9 @@
                 name: tokenInfo.name,
                 logoUri: logoUri,
                 uri: tokenInfo.uri,
+                totalSupply: tokenInfo.totalSupply,
             });
+            await loadTokens();
             showNotification("Token imported successfully!");
             closeDialog();
         } catch (err) {
@@ -121,6 +139,50 @@
         <button class="primary-button" on:click={() => (showImportDialog = true)}>
             + Import Token
         </button>
+    </div>
+
+    <div class="tokens-container">
+        {#if tokens.length === 0}
+            <div class="empty-state">
+                No tokens imported yet. Click "Import Token" to add one.
+            </div>
+        {:else}
+            <table class="tokens-table">
+                <thead>
+                    <tr>
+                        <th>Token</th>
+                        <th>Symbol</th>
+                        <th>Address</th>
+                        <th>Decimals</th>
+                        <th>Total Supply</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#each tokens as token}
+                        <tr>
+                            <td>
+                                <div class="token-name-cell">
+                                    <span>{token.name || 'Unknown'}</span>
+                                    {#if token.logoUri}
+                                        <img src={token.logoUri} alt="Token Logo" class="token-logo" />
+                                    {/if}
+                                </div>
+                            </td>
+                            <td>{token.symbol}</td>
+                            <td class="address-cell">{token.address}</td>
+                            <td>{token.decimals}</td>
+                            <td>
+                                {new Intl.NumberFormat("en-US", {
+                                    maximumFractionDigits: 2,
+                                    minimumFractionDigits: 0,
+                                    useGrouping: true,
+                                }).format(token.totalSupply / Math.pow(10, token.decimals))}
+                            </td>
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
+        {/if}
     </div>
 
     {#if showImportDialog}
@@ -576,6 +638,80 @@
 
         .label {
             color: #999;
+        }
+    }
+
+    .tokens-container {
+        margin-top: 2rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .tokens-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+    }
+
+    .tokens-table th,
+    .tokens-table td {
+        padding: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .tokens-table th {
+        background: rgba(255, 255, 255, 0.05);
+        font-weight: 500;
+        color: #666;
+    }
+
+    .token-name-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+    }
+
+    .token-logo {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .address-cell {
+        font-family: monospace;
+        font-size: 0.9rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #666;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .tokens-table th {
+            color: #999;
+        }
+
+        .tokens-table td {
+            border-bottom-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .empty-state {
+            color: #999;
+        }
+    }
+
+    /* Make table responsive */
+    @media (max-width: 768px) {
+        .tokens-container {
+            overflow-x: auto;
+        }
+
+        .tokens-table {
+            min-width: 600px;
         }
     }
 </style>

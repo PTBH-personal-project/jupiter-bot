@@ -8,13 +8,14 @@ pub async fn import_token(
     decimals: i64,
     name: Option<String>,
     logo_uri: Option<String>,
+    total_supply: String,
     uri: String,
 ) -> Result<(), String> {
     let db = &state.db;
 
     sqlx::query(
-        "INSERT INTO tokens (address, symbol, decimals, name, logo_uri, uri) 
-         VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO tokens (address, symbol, decimals, name, logo_uri, uri, total_supply) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(address)
     .bind(symbol)
@@ -22,6 +23,7 @@ pub async fn import_token(
     .bind(name)
     .bind(logo_uri)
     .bind(uri)
+    .bind(total_supply)
     .execute(db)
     .await
     .map_err(|e| format!("Failed to import token: {}", e))?;
