@@ -26,6 +26,13 @@
     let notificationMessage = "";
     let notificationType: "success" | "error" = "success";
 
+    // Add loading state for delete operation
+    let isDeleting = false;
+
+    // Add progress state
+    let progress = 100;
+    let progressInterval: ReturnType<typeof setInterval> | null = null;
+
     onMount(() => {
         loadAccountDetails().then(() => {
             fetchBalance();
@@ -136,7 +143,8 @@
     // Update the delete function
     async function deleteTokenAccount(pubkey: string) {
         try {
-            await invoke("delete_token_account", {
+            isDeleting = true;
+            const txHash = await invoke("delete_token_account", {
                 owner: $page.params.publicKey,
                 tokenAccountPubkey: pubkey,
             });
@@ -145,26 +153,54 @@
             showDeleteConfirmation = false;
             tokenAccountToDelete = null;
 
-            // Show success notification
-            notificationMessage = "Token account deleted successfully";
+            // Show success notification with link
+            notificationMessage = `Token account deleted successfully. <a href="https://explorer.solana.com/tx/${txHash}" target="_blank" rel="noopener noreferrer">View transaction</a>`;
             notificationType = "success";
             showNotification = true;
+            
+            // Clean up existing interval if any
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
 
-            // Hide notification after 3 seconds
-            setTimeout(() => {
-                showNotification = false;
-            }, 3000);
+            // Reset and start progress bar
+            progress = 100;
+            progressInterval = setInterval(() => {
+                if (progress <= 0) {
+                    clearInterval(progressInterval!);
+                    progressInterval = null;
+                    showNotification = false;
+                } else {
+                    progress -= 1.67; // 100 / (6000ms / 100ms)
+                }
+            }, 100);
+
         } catch (err) {
             console.error("Error deleting token account:", err);
-            // Show error notification
             notificationMessage = "Failed to delete token account";
             notificationType = "error";
             showNotification = true;
 
-            // Hide notification after 3 seconds
-            setTimeout(() => {
-                showNotification = false;
-            }, 3000);
+            // Clean up existing interval if any
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+
+            // Start progress bar for error notification
+            progress = 100;
+            progressInterval = setInterval(() => {
+                if (progress <= 0) {
+                    clearInterval(progressInterval!);
+                    progressInterval = null;
+                    showNotification = false;
+                } else {
+                    progress -= 1.67;
+                }
+            }, 100);
+        } finally {
+            isDeleting = false;
         }
     }
 
@@ -399,31 +435,43 @@
             <h2>Delete Token Account</h2>
             <p>Are you sure to delete this token account and redeem SOL?</p>
             <div class="button-group">
-                <button
+                <button 
                     class="popup-button cancel-button"
                     on:click={() => {
                         showDeleteConfirmation = false;
                         tokenAccountToDelete = null;
                     }}
+                    disabled={isDeleting}
                 >
                     Cancel
                 </button>
-                <button
+                <button 
                     class="popup-button delete-button-confirm"
-                    on:click={() =>
-                        tokenAccountToDelete && deleteTokenAccount(tokenAccountToDelete)}
+                    on:click={() => tokenAccountToDelete && deleteTokenAccount(tokenAccountToDelete)}
+                    disabled={isDeleting}
                 >
-                    Delete
+                    {#if isDeleting}
+                        <div class="loading-spinner"></div>
+                        <span>Deleting...</span>
+                    {:else}
+                        Delete
+                    {/if}
                 </button>
             </div>
         </div>
     </div>
 {/if}
 
-<!-- Add notification component at the end of the file, after the confirmation dialog -->
+<!-- Update the notification component -->
 {#if showNotification}
     <div class="notification {notificationType}">
-        {notificationMessage}
+        {@html notificationMessage}
+        <div class="progress-bar">
+            <div 
+                class="progress-bar-fill" 
+                style="width: {progress}%"
+            ></div>
+        </div>
     </div>
 {/if}
 
@@ -901,6 +949,9 @@
     }
 
     .popup-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         padding: 12px 24px;
         font-size: 1.1em;
         font-weight: 500;
@@ -909,6 +960,11 @@
         cursor: pointer;
         transition: all 0.2s ease-in-out;
         min-width: 120px;
+    }
+
+    .popup-button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
     }
 
     .delete-button-confirm {
@@ -946,7 +1002,7 @@
         }
     }
 
-    /* Add notification styles */
+    /* Update notification styles to handle links */
     .notification {
         position: fixed;
         bottom: 20px;
@@ -960,12 +1016,15 @@
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
 
-    .notification.success {
-        background-color: #28a745;
+    .notification a {
+        color: white;
+        text-decoration: underline;
+        opacity: 0.9;
     }
 
-    .notification.error {
-        background-color: #dc3545;
+    .notification a:hover {
+        opacity: 1;
+        text-decoration: none;
     }
 
     @keyframes slideIn {
@@ -986,6 +1045,97 @@
 
         .notification.error {
             background-color: #da3633;
+        }
+    }
+
+    /* Add loading spinner styles */
+    .loading-spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #ffffff;
+        border-top-color: transparent;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* Update button styles */
+    .popup-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px 24px;
+        font-size: 1.1em;
+        font-weight: 500;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+        min-width: 120px;
+    }
+
+    .popup-button:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .delete-button-confirm:disabled {
+        background-color: #dc3545;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .delete-button-confirm:disabled {
+            background-color: #dc3545;
+            opacity: 0.7;
+        }
+    }
+
+    /* Add progress bar styles */
+    .notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        padding: 12px 24px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .progress-bar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 0 0 8px 8px;
+        overflow: hidden;
+    }
+
+    .progress-bar-fill {
+        height: 100%;
+        background: rgba(255, 255, 255, 0.7);
+        border-radius: 0 0 8px 8px;
+        transition: width 100ms linear;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .progress-bar {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .progress-bar-fill {
+            background: rgba(255, 255, 255, 0.5);
         }
     }
 </style>

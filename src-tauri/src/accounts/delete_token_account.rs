@@ -1,16 +1,12 @@
 use std::str::FromStr;
 
-use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
-    instruction::Instruction,
-    message::Message,
     pubkey::Pubkey,
     signature::{Keypair, Signer},
-    system_instruction,
     transaction::Transaction,
 };
-use spl_token::instruction::{self as token_instruction, MAX_SIGNERS};
-use tauri::{command, State};
+use spl_token::instruction::{self as token_instruction};
+use tauri::State;
 
 use crate::AppState;
 
@@ -21,7 +17,7 @@ pub async fn delete_token_account(
     state: State<'_, AppState>,
     owner: String,
     token_account_pubkey: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
     // Parse the token account pubkey
     let owner_pubkey = Pubkey::from_str(&owner).map_err(|e| e.to_string())?;
     let token_account_pubkey =
@@ -90,7 +86,5 @@ pub async fn delete_token_account(
         .send_and_confirm_transaction(&transaction)
         .map_err(|e| e.to_string())?;
 
-    println!("tx_result: {:?}", tx_result);
-
-    Ok(())
+    Ok(tx_result.to_string())
 }
