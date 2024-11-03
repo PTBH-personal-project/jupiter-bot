@@ -2,6 +2,7 @@
     import { invoke } from "@tauri-apps/api/core";
     import type { TokenInfo } from "../../types/tokens";
     import { onMount } from "svelte";
+    import Tooltip from "../..//components/Tooltip.svelte";
 
     let showImportDialog = false;
     let address = "";
@@ -19,6 +20,7 @@
     };
 
     let tokens: TokenInfo[] = [];
+    let tokenPrices: { [key: string]: number | null } = {};
 
     onMount(async () => {
         await loadTokens();
@@ -27,6 +29,20 @@
     async function loadTokens() {
         try {
             tokens = await invoke("get_all_tokens");
+            await Promise.all(
+                tokens.map(async (token) => {
+                    try {
+                        const price = await invoke("get_token_price", {
+                            tokenAddress: token.address,
+                            tokenDecimals: token.decimals,
+                        }) as number;
+                        tokenPrices[token.address] = price;
+                    } catch (error) {
+                        console.error(`Error fetching price for ${token.address}:`, error);
+                        tokenPrices[token.address] = null;
+                    }
+                })
+            );
         } catch (err) {
             console.error("Error loading tokens:", err);
             showNotification("Failed to load tokens: " + err, true);
@@ -128,6 +144,37 @@
         tokenPrice = null;
         logoUri = "";
     }
+
+    async function refreshToken(token: TokenInfo) {
+        try {
+            // Fetch updated token info
+            const updatedInfo = await invoke("get_token_info", { 
+                tokenAddress: token.address 
+            }) as TokenInfo;
+
+            // Update the token in the list
+            tokens = tokens.map(t => 
+                t.address === token.address ? updatedInfo : t
+            );
+
+            // Fetch updated price
+            try {
+                const price = await invoke("get_token_price", {
+                    tokenAddress: token.address,
+                    tokenDecimals: token.decimals,
+                }) as number;
+                tokenPrices[token.address] = price;
+            } catch (error) {
+                console.error(`Error fetching price for ${token.address}:`, error);
+                tokenPrices[token.address] = null;
+            }
+
+            showNotification("Token refreshed successfully!");
+        } catch (err) {
+            console.error("Error refreshing token:", err);
+            showNotification("Failed to refresh token: " + err, true);
+        }
+    }
 </script>
 
 <main class="container">
@@ -155,6 +202,8 @@
                         <th>Address</th>
                         <th>Decimals</th>
                         <th>Total Supply</th>
+                        <th>Price (USDT)</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -177,6 +226,27 @@
                                     minimumFractionDigits: 0,
                                     useGrouping: true,
                                 }).format(token.totalSupply / Math.pow(10, token.decimals))}
+                            </td>
+                            <td>
+                                {#if tokenPrices[token.address] === undefined}
+                                    <span class="skeleton skeleton-text"></span>
+                                {:else if tokenPrices[token.address] !== null}
+                                    {(Number(tokenPrices[token.address]) / Math.pow(10, 6)).toFixed(6)}
+                                {:else}
+                                    Not supported
+                                {/if}
+                            </td>
+                            <td>
+                                <Tooltip text="Refresh token information">
+                                    <button 
+                                        class="icon-button" 
+                                        on:click={() => refreshToken(token)}
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+                                        </svg>
+                                    </button>
+                                </Tooltip>
                             </td>
                         </tr>
                     {/each}
@@ -713,5 +783,101 @@
         .tokens-table {
             min-width: 600px;
         }
+    }
+
+    .skeleton {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: loading 1.5s infinite;
+        border-radius: 4px;
+    }
+
+    .skeleton-text {
+        height: 1em;
+        width: 100px;
+        display: inline-block;
+    }
+
+    @keyframes loading {
+        0% {
+            background-position: 200% 0;
+        }
+        100% {
+            background-position: -200% 0;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .skeleton {
+            background: linear-gradient(90deg, #222 25%, #333 50%, #222 75%);
+            background-size: 200% 100%;
+        }
+    }
+
+    .icon-button {
+        background: none;
+        border: none;
+        padding: 0.5rem;
+        cursor: pointer;
+        color: #666;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+
+    .icon-button:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #396cd8;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .icon-button {
+            color: #999;
+        }
+
+        .icon-button:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #4a7be0;
+        }
+    }
+
+    .tooltip-wrapper {
+        position: relative;
+        display: inline-block;
+    }
+
+    .tooltip {
+        visibility: hidden;
+        position: absolute;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        z-index: 1;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .tooltip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+    }
+
+    .tooltip-wrapper:hover .tooltip {
+        visibility: visible;
+        opacity: 1;
     }
 </style>
