@@ -175,6 +175,19 @@
             showNotification("Failed to refresh token: " + err, true);
         }
     }
+
+    async function deleteToken(token: TokenInfo) {
+        try {
+            await invoke("delete_token", { 
+                address: token.address 
+            });
+            await loadTokens();
+            showNotification("Token deleted successfully!");
+        } catch (err) {
+            console.error("Error deleting token:", err);
+            showNotification("Failed to delete token: " + err, true);
+        }
+    }
 </script>
 
 <main class="container">
@@ -237,16 +250,28 @@
                                 {/if}
                             </td>
                             <td>
-                                <Tooltip text="Refresh token information">
-                                    <button 
-                                        class="icon-button" 
-                                        on:click={() => refreshToken(token)}
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
-                                        </svg>
-                                    </button>
-                                </Tooltip>
+                                <div class="action-buttons">
+                                    <Tooltip text="Refresh token information">
+                                        <button 
+                                            class="icon-button" 
+                                            on:click={() => refreshToken(token)}
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
+                                            </svg>
+                                        </button>
+                                    </Tooltip>
+                                    <Tooltip text="Delete token">
+                                        <button 
+                                            class="icon-button delete-button" 
+                                            on:click={() => deleteToken(token)}
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                                            </svg>
+                                        </button>
+                                    </Tooltip>
+                                </div>
                             </td>
                         </tr>
                     {/each}
@@ -879,5 +904,32 @@
     .tooltip-wrapper:hover .tooltip {
         visibility: visible;
         opacity: 1;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-start;
+        align-items: center;
+    }
+
+    .delete-button {
+        color: #dc2626;
+    }
+
+    .delete-button:hover {
+        background: rgba(220, 38, 38, 0.1);
+        color: #ef4444;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .delete-button {
+            color: #ef4444;
+        }
+
+        .delete-button:hover {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+        }
     }
 </style>
