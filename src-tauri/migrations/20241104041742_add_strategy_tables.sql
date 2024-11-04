@@ -15,3 +15,5 @@ CREATE TABLE IF NOT EXISTS strategies (
 );
 
 CREATE INDEX idx_strategies_status_next_time_execute ON strategies(status, next_time_execute);
+
+ALTER TABLE strategies ADD COLUMN txHash TEXT;
