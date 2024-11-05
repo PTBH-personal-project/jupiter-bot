@@ -67,6 +67,7 @@ pub async fn run() {
             delete_rpc,
             get_token_info,
             get_token_price,
+            get_token_price_in_sol,
             import_token,
             get_all_tokens,
             delete_token,
