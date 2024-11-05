@@ -72,6 +72,7 @@ pub async fn run() {
             get_all_tokens,
             delete_token,
             add_strategy,
+            delete_strategy,
             get_all_strategies,
             get_all_strategies_with_full_information
         ])

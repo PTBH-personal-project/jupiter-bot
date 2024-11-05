@@ -1,5 +1,7 @@
 pub mod add_strategy;
 pub mod get_all_strategies;
+pub mod delete_strategy;
 
 pub use add_strategy::*;
 pub use get_all_strategies::*;
+pub use delete_strategy::*;

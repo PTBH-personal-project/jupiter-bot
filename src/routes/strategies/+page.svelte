@@ -18,7 +18,7 @@
     let price: number = 0;
     let amount: number = 0;
     let prioritizationFee: number = 5000;
-    let slippage: number = 100; // 1%
+    let slippage: number = 5; // 1%
 
     let notification = {
         show: false,
@@ -196,7 +196,7 @@
 
     async function deleteStrategy(id: number) {
         try {
-            await invoke("delete_strategy", { id });
+            await invoke("delete_strategy", { strategyId: id });
             await loadStrategies();
             showNotification("Strategy deleted successfully!");
         } catch (err) {
@@ -556,10 +556,10 @@
                 <div class="dialog-content">
                     <p>Are you sure you want to delete this strategy?</p>
                     <div class="dialog-actions">
-                        <button type="button" class="cancel-button" on:click={closeDeleteConfirm}>
+                        <button type="button" class="dialog-button cancel-button" on:click={closeDeleteConfirm}>
                             Cancel
                         </button>
-                        <button type="button" class="delete-button" on:click={confirmDelete}>
+                        <button type="button" class="dialog-button delete-button-confirm" on:click={confirmDelete}>
                             Delete
                         </button>
                     </div>
@@ -634,53 +634,107 @@
 
     .dialog {
         background-color: white;
-        border-radius: 8px;
+        border-radius: 12px;
         width: 90%;
-        max-width: 500px;
-        max-height: 90vh;
+        max-width: 600px;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
     .dialog-header {
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid #ddd;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid #e5e7eb;
         display: flex;
         justify-content: space-between;
         align-items: center;
     }
 
+    .dialog-header h2 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #111827;
+        margin: 0;
+    }
+
     .dialog-content {
         padding: 1rem;
-        overflow-y: auto;
-        flex: 1;
-        position: relative;
-        box-sizing: border-box;
+    }
+
+    .dialog-content p {
+        margin: 0;
+        color: #4b5563;
+        font-size: 1rem;
+        line-height: 1.5;
     }
 
     .dialog-actions {
         display: flex;
         justify-content: flex-end;
         gap: 1rem;
-        margin-top: 2rem;
+        margin-top: 1rem;
+    }
+
+    .close-button {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #6b7280;
+        cursor: pointer;
+        padding: 0.25rem;
+        line-height: 1;
+    }
+
+    .close-button:hover {
+        color: #374151;
+    }
+
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+        .dialog {
+            background-color: #1f2937;
+            border: 1px solid #374151;
+        }
+
+        .dialog-header {
+            border-bottom-color: #374151;
+        }
+
+        .dialog-header h2 {
+            color: #f3f4f6;
+        }
+
+        .dialog-content p {
+            color: #d1d5db;
+        }
+
+        .close-button {
+            color: #9ca3af;
+        }
+
+        .close-button:hover {
+            color: #f3f4f6;
+        }
     }
 
     .cancel-button {
         padding: 0.75rem 1.5rem;
         border-radius: 8px;
-        font-size: 1rem;
+        font-size: 0.875rem;
         font-weight: 500;
         cursor: pointer;
         transition: all 0.2s ease-in-out;
-        background-color: transparent;
-        border: 1px solid #ddd;
-        color: #666;
+        background-color: white;
+        border: 1px solid #e5e7eb;
+        color: #4b5563;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .cancel-button:hover {
         background-color: #f3f4f6;
-        border-color: #ccc;
+        border-color: #d1d5db;
     }
 
     .submit-button {
@@ -716,12 +770,13 @@
     /* Dark mode support */
     @media (prefers-color-scheme: dark) {
         .cancel-button {
+            background-color: #374151;
             border-color: #4b5563;
             color: #e5e7eb;
         }
 
         .cancel-button:hover {
-            background-color: #374151;
+            background-color: #4b5563;
             border-color: #6b7280;
         }
 
@@ -1234,6 +1289,137 @@
         .delete-button:hover {
             background: rgba(239, 68, 68, 0.1);
             color: #f87171;
+        }
+    }
+
+    .popup-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        padding: 1rem;
+        box-sizing: border-box;
+    }
+
+    .popup-content {
+        background-color: white;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 400px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+
+    .popup-content h2 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #111827;
+        margin: 0;
+    }
+
+    .popup-content p {
+        margin: 0;
+        color: #4b5563;
+        font-size: 1rem;
+        line-height: 1.5;
+    }
+
+    .button-group {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+        padding: 0 1.5rem 1.5rem;
+    }
+
+    .popup-button {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #6b7280;
+        cursor: pointer;
+        padding: 0.25rem;
+        line-height: 1;
+    }
+
+    .popup-button:hover {
+        color: #374151;
+    }
+
+    .popup-button.cancel-button {
+        background-color: transparent;
+        border: none;
+        color: #6b7280;
+    }
+
+    .popup-button.cancel-button:hover {
+        color: #374151;
+    }
+
+    .popup-button.delete-button-confirm {
+        background-color: #dc2626;
+        color: white;
+    }
+
+    .popup-button.delete-button-confirm:hover {
+        background-color: #b91c1c;
+    }
+
+    .dialog-button {
+        padding: 0.875rem 1.75rem;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .dialog-button.cancel-button {
+        background-color: white;
+        border: 1px solid #e5e7eb;
+        color: #4b5563;
+    }
+
+    .dialog-button.cancel-button:hover {
+        background-color: #f3f4f6;
+        border-color: #d1d5db;
+    }
+
+    .dialog-button.delete-button-confirm {
+        background-color: #dc2626;
+        border: none;
+        color: white;
+    }
+
+    .dialog-button.delete-button-confirm:hover {
+        background-color: #b91c1c;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .dialog-button.cancel-button {
+            background-color: #374151;
+            border-color: #4b5563;
+            color: #e5e7eb;
+        }
+
+        .dialog-button.cancel-button:hover {
+            background-color: #4b5563;
+            border-color: #6b7280;
+        }
+
+        .dialog-button.delete-button-confirm {
+            background-color: #dc2626;
+        }
+
+        .dialog-button.delete-button-confirm:hover {
+            background-color: #b91c1c;
         }
     }
 </style>
