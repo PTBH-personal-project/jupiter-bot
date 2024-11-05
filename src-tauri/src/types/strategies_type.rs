@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Debug, Serialize, Deserialize, sqlx::Type)]
 pub enum StrategyStatus {
     Executing,
@@ -15,6 +14,7 @@ pub enum StrategyType {
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
 pub struct Strategy {
     pub id: i64,
     pub strategy_type: String,

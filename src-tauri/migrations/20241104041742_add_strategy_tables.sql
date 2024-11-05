@@ -9,11 +9,11 @@ CREATE TABLE IF NOT EXISTS strategies (
     token_address TEXT NOT NULL,
     price INTEGER NOT NULL,
     amount INTEGER NOT NULL,
-    prioritization_fee INTEGER NOT NULL
+    prioritization_fee INTEGER NOT NULL,
     slippage INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_strategies_status_next_time_execute ON strategies(status, next_time_execute);
 
-ALTER TABLE strategies ADD COLUMN txHash TEXT;
+ALTER TABLE strategies ADD COLUMN tx_hash TEXT;

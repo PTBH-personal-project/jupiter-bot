@@ -1,5 +1,6 @@
 mod accounts;
 mod rpcs;
+mod strategies;
 mod tokens;
 mod types;
 mod utils;
@@ -13,6 +14,7 @@ use solana_sdk::{
     msg,
     pubkey::{self, Pubkey},
 };
+pub use strategies::*;
 use tauri::{Manager, State};
 use tokens::*;
 pub use types::*;
@@ -68,6 +70,7 @@ pub async fn run() {
             import_token,
             get_all_tokens,
             delete_token,
+            add_strategy,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
