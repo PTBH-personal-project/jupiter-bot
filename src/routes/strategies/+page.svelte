@@ -1,13 +1,13 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
     import { onMount } from "svelte";
-    import type { Strategy } from "../../types/strategies";
+    import type { Strategy, StrategyWithFullInformation } from "../../types/strategies";
     import type { Account } from "../../types/accounts";
     import Tooltip from "../../components/Tooltip.svelte";
     import type { TokenInfo } from "../../types/tokens";
     import { removeNullChars } from "$lib/utils/helpers";
     let showAddDialog = false;
-    let strategies: Strategy[] = [];
+    let strategies: StrategyWithFullInformation[] = [];
     let isLoading = false;
     let error: string | null = null;
 
@@ -94,7 +94,8 @@
 
     async function loadStrategies() {
         try {
-            strategies = await invoke("get_all_strategies");
+            strategies = await invoke("get_all_strategies_with_full_information");
+            console.log("STRATEGIES", strategies);
         } catch (err) {
             console.error("Error loading strategies:", err);
             showNotification("Failed to load strategies: " + err, true);
@@ -254,7 +255,6 @@
                         <th>Amount</th>
                         <th>Interval</th>
                         <th>Status</th>
-                        <th>Next Execution</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -262,17 +262,35 @@
                     {#each strategies as strategy}
                         <tr>
                             <td>{strategy.strategyType}</td>
-                            <td class="address-cell">{strategy.tokenAddress}</td>
-                            <td>{strategy.price}</td>
-                            <td>{strategy.amount}</td>
+                            <td class="address-cell">
+                                {#if strategy.tokenName}
+                                    <div class="token-info">
+                                        <div class="token-name-with-logo">
+                                            <span class="token-name">{removeNullChars(strategy.tokenName)}</span>
+                                            {#if strategy.logoUri}
+                                                <img 
+                                                    src={strategy.logoUri} 
+                                                    alt={strategy.tokenName}
+                                                    class="token-logo"
+                                                />
+                                            {/if}
+                                        </div>
+                                        <span class="token-address">({shortenAddress(strategy.tokenAddress)})</span>
+                                    </div>
+                                {:else}
+                                    {shortenAddress(strategy.tokenAddress)}
+                                {/if}
+                            </td>
+                            <td>{(strategy.price / Math.pow(10, 9)).toFixed(9)}</td>
+                            <td>
+                                {strategy.strategyType === 'Buy' 
+                                    ? Number((strategy.amount / Math.pow(10, 9)).toFixed(9)).toString()
+                                    : Number((strategy.amount / Math.pow(10, strategy.decimals)).toFixed(strategy.decimals)).toString()}
                             <td>{strategy.intervalTime}s</td>
                             <td>
                                 <span class="status-badge status-{strategy.status.toLowerCase()}">
                                     {strategy.status}
                                 </span>
-                            </td>
-                            <td>
-                                {new Date(strategy.nextTimeExecute * 1000).toLocaleString()}
                             </td>
                             <td>
                                 <div class="action-buttons">
@@ -1032,6 +1050,190 @@
     @media (prefers-color-scheme: dark) {
         .tooltip-trigger {
             color: #9ca3af;
+        }
+    }
+
+    /* Add these styles for the strategies table */
+    .strategies-container {
+        margin-top: 2rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .strategies-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+    }
+
+    .strategies-table th,
+    .strategies-table td {
+        padding: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .strategies-table th {
+        background: rgba(255, 255, 255, 0.05);
+        font-weight: 600;
+        color: #374151;
+        padding: 1rem;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .address-cell {
+        font-family: monospace;
+        font-size: 0.9rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #666;
+    }
+
+    /* Make table responsive */
+    @media (max-width: 768px) {
+        .strategies-container {
+            overflow-x: auto;
+        }
+
+        .strategies-table {
+            min-width: 600px;
+        }
+    }
+
+    /* Status badge styles - keep existing but adjust colors */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+        .strategies-table th {
+            color: #e5e7eb;
+        }
+
+        .strategies-table td {
+            border-bottom-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .empty-state {
+            color: #999;
+        }
+
+        .status-executing {
+            background-color: #065f46;
+            color: #d1fae5;
+        }
+
+        .status-executed {
+            background-color: #075985;
+            color: #e0f2fe;
+        }
+
+        .status-disabled {
+            background-color: #991b1b;
+            color: #fee2e2;
+        }
+    }
+
+    .token-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .token-name {
+        font-weight: 500;
+        color: #374151;
+    }
+
+    .token-address {
+        font-size: 0.8rem;
+        color: #666;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .token-name {
+            color: #e5e7eb;
+        }
+
+        .token-address {
+            color: #9ca3af;
+        }
+    }
+
+    .token-name-with-logo {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .token-logo {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+    }
+
+    /* Update the action buttons and delete button styles */
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: flex-start;
+        align-items: center;
+    }
+
+    .icon-button {
+        background: none;
+        border: none;
+        padding: 0.5rem;
+        cursor: pointer;
+        color: #666;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+
+    .icon-button:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #396cd8;
+    }
+
+    .delete-button {
+        color: #dc2626;
+    }
+
+    .delete-button:hover {
+        background: rgba(220, 38, 38, 0.1);
+        color: #ef4444;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .icon-button {
+            color: #999;
+        }
+
+        .icon-button:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #4a7be0;
+        }
+
+        .delete-button {
+            color: #ef4444;
+        }
+
+        .delete-button:hover {
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
         }
     }
 </style>

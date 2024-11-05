@@ -72,6 +72,8 @@ pub async fn run() {
             get_all_tokens,
             delete_token,
             add_strategy,
+            get_all_strategies,
+            get_all_strategies_with_full_information
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
