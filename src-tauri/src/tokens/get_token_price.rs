@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use jupiter_swap_api_client::quote::QuoteRequest;
+use jupiter_swap_api_client::{quote::QuoteRequest, JupiterSwapApiClient};
 use solana_sdk::{msg, pubkey::Pubkey};
 use tauri::State;
 

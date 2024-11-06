@@ -46,7 +46,10 @@
 
     async function fetchTokenPrice(tokenAddress: string, tokenDecimals: number) {
         try {
-            const onchainPrice = await invoke("get_token_price_in_sol", { tokenAddress, tokenDecimals });
+            const onchainPrice = await invoke("get_token_price_in_sol", {
+                tokenAddress,
+                tokenDecimals,
+            });
             selectedTokenPrice = Number(onchainPrice) / Math.pow(10, 9); // Assuming price is in lamports
             price = selectedTokenPrice;
         } catch (err) {
@@ -77,9 +80,9 @@
     async function handleAccountSelect(event: Event) {
         const select = event.target as HTMLSelectElement;
         selectedAccountId = select.value;
-        
+
         if (selectedAccountId) {
-            const selectedAccount = accounts.find(acc => acc.id.toString() === selectedAccountId);
+            const selectedAccount = accounts.find((acc) => acc.id.toString() === selectedAccountId);
             if (selectedAccount) {
                 await fetchAccountBalance(selectedAccount.public_key);
             }
@@ -156,13 +159,18 @@
                 accountPrivateKey: selectedAccount.private_key,
                 tokenAddress,
                 price: Math.trunc(price * Math.pow(10, 9)),
-                amount: strategyType === "Buy" ? Math.trunc(amount * Math.pow(10, 9)) : Math.trunc(amount * Math.pow(10, selectedToken.decimals)),
+                amount:
+                    strategyType === "Buy"
+                        ? Math.trunc(amount * Math.pow(10, 9))
+                        : Math.trunc(amount * Math.pow(10, selectedToken.decimals)),
                 prioritizationFee,
                 slippage: Math.trunc(slippage * 10000),
             });
 
             await loadStrategies();
-            showNotification(`Successfully added ${strategyType} strategy for ${selectedToken.name}`);
+            showNotification(
+                `Successfully added ${strategyType} strategy for ${selectedToken.name}`
+            );
             closeDialog();
         } catch (err) {
             console.error("Error adding strategy:", err);
@@ -278,16 +286,20 @@
                                 {#if strategy.tokenName}
                                     <div class="token-info">
                                         <div class="token-name-with-logo">
-                                            <span class="token-name">{removeNullChars(strategy.tokenName)}</span>
+                                            <span class="token-name"
+                                                >{removeNullChars(strategy.tokenName)}</span
+                                            >
                                             {#if strategy.logoUri}
-                                                <img 
-                                                    src={strategy.logoUri} 
+                                                <img
+                                                    src={strategy.logoUri}
                                                     alt={strategy.tokenName}
                                                     class="token-logo"
                                                 />
                                             {/if}
                                         </div>
-                                        <span class="token-address">({shortenAddress(strategy.tokenAddress)})</span>
+                                        <span class="token-address"
+                                            >({shortenAddress(strategy.tokenAddress)})</span
+                                        >
                                     </div>
                                 {:else}
                                     {shortenAddress(strategy.tokenAddress)}
@@ -295,21 +307,29 @@
                             </td>
                             <td>{(strategy.price / Math.pow(10, 9)).toFixed(9)}</td>
                             <td>
-                                {strategy.strategyType === 'Buy' 
-                                    ? Number((strategy.amount / Math.pow(10, 9)).toFixed(9)).toString()
-                                    : Number((strategy.amount / Math.pow(10, strategy.decimals)).toFixed(strategy.decimals)).toString()}
-                            <td>{strategy.intervalTime}s</td>
+                                {strategy.strategyType === "Buy"
+                                    ? Number(
+                                          (strategy.amount / Math.pow(10, 9)).toFixed(9)
+                                      ).toString()
+                                    : Number(
+                                          (
+                                              strategy.amount / Math.pow(10, strategy.decimals)
+                                          ).toFixed(strategy.decimals)
+                                      ).toString()}
+                            </td><td>{strategy.intervalTime}s</td>
                             <td>{(strategy.slippage / 10000).toFixed(2)}%</td>
                             <td>
-                                <Tooltip text={
-                                    strategy.status === 'Executing' ? 'Disable this strategy' :
-                                    strategy.status === 'Disabled' ? 'Execute this strategy' :
-                                    'Executed successfully, can\'t toggle'
-                                }>
-                                    <button 
+                                <Tooltip
+                                    text={strategy.status === "Executing"
+                                        ? "Disable this strategy"
+                                        : strategy.status === "Disabled"
+                                          ? "Execute this strategy"
+                                          : "Executed successfully, can't toggle"}
+                                >
+                                    <button
                                         class="status-badge status-{strategy.status.toLowerCase()}"
                                         on:click={() => toggleStrategyStatus(strategy.id)}
-                                        disabled={strategy.status === 'Executed'}
+                                        disabled={strategy.status === "Executed"}
                                     >
                                         {strategy.status}
                                     </button>
@@ -407,44 +427,52 @@
                     <div class="form-group">
                         <label for="token-address">Token</label>
                         <div class="custom-select">
-                            <div 
+                            <div
                                 class="select-header"
-                                on:click={() => isTokenDropdownOpen = !isTokenDropdownOpen}
+                                on:click={() => (isTokenDropdownOpen = !isTokenDropdownOpen)}
                             >
                                 {#if selectedToken}
                                     <div class="token-item">
-                                        <img 
-                                            src={selectedToken.logoUri} 
+                                        <img
+                                            src={selectedToken.logoUri}
                                             alt={selectedToken.symbol}
                                             class="token-logo"
                                         />
-                                        <span>{removeNullChars(selectedToken.name)} ({shortenAddress(selectedToken.address)})</span>
+                                        <span
+                                            >{removeNullChars(selectedToken.name)} ({shortenAddress(
+                                                selectedToken.address
+                                            )})</span
+                                        >
                                     </div>
                                 {:else}
                                     <span>Select a token</span>
                                 {/if}
                                 <span class="dropdown-arrow">▼</span>
                             </div>
-                            
+
                             {#if isTokenDropdownOpen}
                                 <div class="dropdown-options">
-                                    {#each tokens.filter(token => token.logoUri) as token}
-                                        <div 
+                                    {#each tokens.filter((token) => token.logoUri) as token}
+                                        <div
                                             class="token-item"
                                             on:click={() => handleTokenSelect(token)}
                                         >
-                                            <img 
-                                                src={token.logoUri} 
+                                            <img
+                                                src={token.logoUri}
                                                 alt={token.symbol}
                                                 class="token-logo"
                                             />
-                                            <span>{removeNullChars(token.name)} ({shortenAddress(token.address)})</span>
+                                            <span
+                                                >{removeNullChars(token.name)} ({shortenAddress(
+                                                    token.address
+                                                )})</span
+                                            >
                                         </div>
                                     {/each}
                                 </div>
                             {/if}
                         </div>
-                        
+
                         {#if selectedToken}
                             <div class="helper-text">
                                 {#if selectedTokenPrice !== null}
@@ -460,9 +488,21 @@
                         <label for="interval-time">
                             <div class="label-with-tooltip">
                                 Interval Time (seconds)
-                                <Tooltip text="The interval period between each times the strategy executes">
+                                <Tooltip
+                                    text="The interval period between each times the strategy executes"
+                                >
                                     <span class="tooltip-trigger">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            width="16"
+                                            height="16"
+                                            viewBox="0 0 24 24"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            stroke-width="2"
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                        >
                                             <circle cx="12" cy="12" r="10"></circle>
                                             <line x1="12" y1="16" x2="12" y2="12"></line>
                                             <line x1="12" y1="8" x2="12.01" y2="8"></line>
@@ -497,7 +537,7 @@
                                 {#if strategyType === "Buy"}
                                     Amount SOL to buy
                                 {:else}
-                                    Amount {selectedToken?.name || ''} to sell
+                                    Amount {selectedToken?.name || ""} to sell
                                 {/if}
                             </label>
                             <input
@@ -588,10 +628,18 @@
                 <div class="dialog-content">
                     <p>Are you sure you want to delete this strategy?</p>
                     <div class="dialog-actions">
-                        <button type="button" class="dialog-button cancel-button" on:click={closeDeleteConfirm}>
+                        <button
+                            type="button"
+                            class="dialog-button cancel-button"
+                            on:click={closeDeleteConfirm}
+                        >
                             Cancel
                         </button>
-                        <button type="button" class="dialog-button delete-button-confirm" on:click={confirmDelete}>
+                        <button
+                            type="button"
+                            class="dialog-button delete-button-confirm"
+                            on:click={confirmDelete}
+                        >
                             Delete
                         </button>
                     </div>
@@ -671,7 +719,9 @@
         max-width: 600px;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        box-shadow:
+            0 4px 6px -1px rgba(0, 0, 0, 0.1),
+            0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
     .dialog-header {
@@ -1212,17 +1262,17 @@
     }
 
     .status-executing {
-        background-color: #10B981;
+        background-color: #10b981;
         color: white;
     }
 
     .status-disabled {
-        background-color: #6B7280;
+        background-color: #6b7280;
         color: white;
     }
 
     .status-executed {
-        background-color: #3B82F6;
+        background-color: #3b82f6;
         color: white;
     }
 
@@ -1371,7 +1421,9 @@
         max-width: 400px;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        box-shadow:
+            0 4px 6px -1px rgba(0, 0, 0, 0.1),
+            0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
     .popup-content h2 {
@@ -1489,7 +1541,7 @@
 
     .half-width {
         flex: 1;
-        margin-bottom: 0;  /* Override the default margin-bottom from form-group */
+        margin-bottom: 0; /* Override the default margin-bottom from form-group */
     }
 
     .notification-container {
