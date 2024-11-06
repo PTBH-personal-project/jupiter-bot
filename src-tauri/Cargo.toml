@@ -33,6 +33,7 @@ jupiter-swap-api-client = { git = "https://github.com/anhoangphuc/jupiter-swap-a
 spl-token = "5.0.2"
 spl-token-2022 = "5.0.2"
 mpl-token-metadata = "=5.0.0-beta.0"
+chrono = "0.4.38"
 
 [patch.crates-io.aes-gcm-siv]
 git = "https://github.com/RustCrypto/AEADs"

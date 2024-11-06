@@ -1,4 +1,13 @@
+use std::str::FromStr;
+
+use jupiter_swap_api_client::JupiterSwapApiClient;
 use serde::{Deserialize, Serialize};
+use solana_sdk::pubkey::Pubkey;
+use tauri::State;
+
+use crate::get_token_price_in_sol_internal;
+
+use super::AppState;
 
 #[derive(Debug, Serialize, Deserialize, sqlx::Type)]
 pub enum StrategyStatus {
@@ -51,4 +60,36 @@ pub struct StrategyWithFullInformation {
     pub decimals: i64,
     pub token_name: String,
     pub account_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum StrategyExecutionStatus {
+    Success,
+    MissingPrice,
+    Failed,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct StrategyExecutionResult {
+    pub tx_hash: Option<String>,
+    pub status: StrategyExecutionStatus,
+    pub message: String,
+}
+
+impl StrategyWithFullInformation {
+    pub async fn execute(&self, jupiter_client: &JupiterSwapApiClient) -> Result<String, String> {
+        let current_price = get_token_price_in_sol_internal(
+            jupiter_client,
+            &self.token_address,
+            self.decimals as u8,
+        )
+        .await?;
+        println!(
+            "Current price: {} at {}",
+            current_price,
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        );
+
+        Ok("Success".to_string())
+    }
 }

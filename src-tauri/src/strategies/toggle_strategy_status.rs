@@ -7,11 +7,12 @@ pub async fn toggle_strategy_status(
 ) -> Result<(), String> {
     let db = &state.db;
     // First get the current status
-    let current_status = sqlx::query_scalar::<_, String>("SELECT status FROM strategies WHERE id = $1")
-        .bind(strategy_id)
-        .fetch_one(db)
-        .await
-        .map_err(|e| e.to_string())?;
+    let current_status =
+        sqlx::query_scalar::<_, String>("SELECT status FROM strategies WHERE id = $1")
+            .bind(strategy_id)
+            .fetch_one(db)
+            .await
+            .map_err(|e| e.to_string())?;
 
     // Determine new status based on current status
     let new_status = match current_status.as_str() {

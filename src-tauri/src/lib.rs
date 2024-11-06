@@ -1,4 +1,5 @@
 mod accounts;
+mod jobs;
 mod rpcs;
 mod strategies;
 mod tokens;
@@ -81,12 +82,23 @@ pub async fn run() {
         .expect("error while running tauri application");
 
     let db = setup_db(&app).await;
+    let db_clone = db.clone();
     let rpc_client = setup_rpc_client();
     let jupiter_client = setup_jupiter_client();
+    let jupiter_client_clone = jupiter_client.clone();
+
+    tauri::async_runtime::spawn(async move {
+        loop {
+            println!("Current time: {}", chrono::Local::now());
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            let _ = jobs::check_strategies(&db_clone, &jupiter_client_clone).await;
+        }
+    });
     app.manage(AppState {
         db,
         rpc_client,
         jupiter_client,
     });
+    // Start background thread to print current time
     app.run(|_, _| {});
 }

@@ -1,7 +1,9 @@
 use crate::types::*;
 
 #[tauri::command]
-pub async fn get_all_strategies(state: tauri::State<'_, AppState>) -> Result<Vec<Strategy>, String> {
+pub async fn get_all_strategies(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<Strategy>, String> {
     let db = &state.db;
 
     sqlx::query_as::<_, Strategy>(
@@ -19,7 +21,7 @@ pub async fn get_all_strategies(state: tauri::State<'_, AppState>) -> Result<Vec
             slippage,
             tx_hash,
             created_at
-        FROM strategies"
+        FROM strategies",
     )
     .fetch_all(db)
     .await
@@ -27,7 +29,9 @@ pub async fn get_all_strategies(state: tauri::State<'_, AppState>) -> Result<Vec
 }
 
 #[tauri::command]
-pub async fn get_all_strategies_with_full_information(state: tauri::State<'_, AppState>) -> Result<Vec<StrategyWithFullInformation>, String> {
+pub async fn get_all_strategies_with_full_information(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<StrategyWithFullInformation>, String> {
     let db = &state.db;
 
     sqlx::query_as::<_, StrategyWithFullInformation>(
@@ -51,7 +55,7 @@ pub async fn get_all_strategies_with_full_information(state: tauri::State<'_, Ap
             a.name as account_name
         FROM strategies s
         LEFT JOIN tokens t ON s.token_address = t.address
-        LEFT JOIN accounts a ON s.account_private_key = a.private_key"
+        LEFT JOIN accounts a ON s.account_private_key = a.private_key",
     )
     .fetch_all(db)
     .await
