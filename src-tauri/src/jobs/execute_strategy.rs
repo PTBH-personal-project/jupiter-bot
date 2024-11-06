@@ -20,7 +20,8 @@ pub async fn check_strategies(
 
     match strategy {
         Ok(strategy) => {
-            strategy.execute(jupiter_client).await?;
+            let execute_result = strategy.execute(jupiter_client).await;
+            println!("{:?}", execute_result);
         }
         Err(e) => {
             eprintln!("Error fetching strategy: {}", e);
