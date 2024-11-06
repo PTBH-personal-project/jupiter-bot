@@ -155,14 +155,14 @@
                 intervalTime,
                 accountPrivateKey: selectedAccount.private_key,
                 tokenAddress,
-                price: price * Math.pow(10, 9),
-                amount: amount * Math.pow(10, selectedToken.decimals),
+                price: Math.trunc(price * Math.pow(10, 9)),
+                amount: strategyType === "Buy" ? Math.trunc(amount * Math.pow(10, 9)) : Math.trunc(amount * Math.pow(10, selectedToken.decimals)),
                 prioritizationFee,
-                slippage,
+                slippage: Math.trunc(slippage * 10000),
             });
 
             await loadStrategies();
-            showNotification("Strategy added successfully!");
+            showNotification(`Successfully added ${strategyType} strategy for ${selectedToken.name}`);
             closeDialog();
         } catch (err) {
             console.error("Error adding strategy:", err);
@@ -186,7 +186,7 @@
         price = 0;
         amount = 0;
         prioritizationFee = 5000;
-        slippage = 100;
+        slippage = 5;
         error = null;
         selectedToken = null;
         isTokenDropdownOpen = false;
@@ -198,7 +198,7 @@
         try {
             await invoke("delete_strategy", { strategyId: id });
             await loadStrategies();
-            showNotification("Strategy deleted successfully!");
+            showNotification("Strategy has been successfully deleted");
         } catch (err) {
             console.error("Error deleting strategy:", err);
             showNotification("Failed to delete strategy: " + err, true);
@@ -229,6 +229,17 @@
 
     // Add this to help with debugging
     $: console.log("Tokens loaded:", tokens);
+
+    async function toggleStrategyStatus(id: number) {
+        try {
+            await invoke("toggle_strategy_status", { strategyId: id });
+            await loadStrategies();
+            showNotification("Strategy status updated successfully");
+        } catch (err) {
+            console.error("Error toggling strategy status:", err);
+            showNotification("Failed to update strategy status: " + err, true);
+        }
+    }
 </script>
 
 <main class="container">
@@ -254,6 +265,7 @@
                         <th>Price</th>
                         <th>Amount</th>
                         <th>Interval</th>
+                        <th>Slippage</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -287,10 +299,21 @@
                                     ? Number((strategy.amount / Math.pow(10, 9)).toFixed(9)).toString()
                                     : Number((strategy.amount / Math.pow(10, strategy.decimals)).toFixed(strategy.decimals)).toString()}
                             <td>{strategy.intervalTime}s</td>
+                            <td>{(strategy.slippage / 10000).toFixed(2)}%</td>
                             <td>
-                                <span class="status-badge status-{strategy.status.toLowerCase()}">
-                                    {strategy.status}
-                                </span>
+                                <Tooltip text={
+                                    strategy.status === 'Executing' ? 'Disable this strategy' :
+                                    strategy.status === 'Disabled' ? 'Execute this strategy' :
+                                    'Executed successfully, can\'t toggle'
+                                }>
+                                    <button 
+                                        class="status-badge status-{strategy.status.toLowerCase()}"
+                                        on:click={() => toggleStrategyStatus(strategy.id)}
+                                        disabled={strategy.status === 'Executed'}
+                                    >
+                                        {strategy.status}
+                                    </button>
+                                </Tooltip>
                             </td>
                             <td>
                                 <div class="action-buttons">
@@ -457,64 +480,62 @@
                         />
                     </div>
 
-                    <div class="form-group">
-                        <label for="price">
-                            <div class="label-with-tooltip">
-                                Price (SOL)
-                                <Tooltip text={`The entry price we want to ${strategyType.toLowerCase()}`}>
-                                    <span class="tooltip-trigger">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <circle cx="12" cy="12" r="10"></circle>
-                                            <line x1="12" y1="16" x2="12" y2="12"></line>
-                                            <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                                        </svg>
-                                    </span>
-                                </Tooltip>
-                            </div>
-                        </label>
-                        <input
-                            type="number"
-                            id="price"
-                            bind:value={price}
-                            min="0"
-                            step="any"
-                            required
-                        />
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label for="price">Price (SOL)</label>
+                            <input
+                                type="number"
+                                id="price"
+                                class="number-input"
+                                bind:value={price}
+                                min="0"
+                                step="any"
+                            />
+                        </div>
+                        <div class="form-group half-width">
+                            <label for="amount">
+                                {#if strategyType === "Buy"}
+                                    Amount SOL to buy
+                                {:else}
+                                    Amount {selectedToken?.name || ''} to sell
+                                {/if}
+                            </label>
+                            <input
+                                type="number"
+                                id="amount"
+                                class="number-input"
+                                bind:value={amount}
+                                min="0"
+                                step="any"
+                            />
+                        </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="amount">{strategyType === "Buy" ? "SOL amount to buy" : `${selectedToken?.symbol || ''} amount to sell`}</label>
-                        <input
-                            type="number"
-                            id="amount"
-                            bind:value={amount}
-                            min="0"
-                            step="any"
-                            required
-                        />
-                    </div>
-
-                    <div class="form-group">
-                        <label for="prioritization-fee">Prioritization Fee</label>
-                        <input
-                            type="number"
-                            id="prioritization-fee"
-                            bind:value={prioritizationFee}
-                            min="0"
-                            required
-                        />
-                    </div>
-
-                    <div class="form-group">
-                        <label for="slippage">Slippage (%)</label>
-                        <input
-                            type="number"
-                            id="slippage"
-                            bind:value={slippage}
-                            min="0"
-                            max="100"
-                            required
-                        />
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label for="prioritization-fee">Prioritization Fee</label>
+                            <input
+                                type="number"
+                                id="prioritization-fee"
+                                class="number-input"
+                                bind:value={prioritizationFee}
+                                min="0"
+                                required
+                            />
+                        </div>
+                        <div class="form-group half-width">
+                            <label for="slippage">Slippage (%)</label>
+                            <input
+                                type="number"
+                                id="slippage"
+                                class="number-input"
+                                bind:value={slippage}
+                                min="0"
+                                max="100"
+                                step="any"
+                                required
+                            />
+                        </div>
                     </div>
 
                     {#if error}
@@ -541,8 +562,19 @@
     {/if}
 
     {#if notification.show}
-        <div class="notification {notification.isError ? 'error' : 'success'}">
-            {notification.message}
+        <div class="notification-container">
+            <div class="notification {notification.isError ? 'error' : 'success'}" role="alert">
+                <div class="notification-content">
+                    <span class="notification-icon">
+                        {#if notification.isError}
+                            ⚠️
+                        {:else}
+                            ✅
+                        {/if}
+                    </span>
+                    <span class="notification-message">{notification.message}</span>
+                </div>
+            </div>
         </div>
     {/if}
 
@@ -1161,12 +1193,37 @@
 
     /* Status badge styles - keep existing but adjust colors */
     .status-badge {
-        display: inline-flex;
-        align-items: center;
         padding: 0.25rem 0.75rem;
         border-radius: 9999px;
         font-size: 0.875rem;
         font-weight: 500;
+        border: none;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+
+    .status-badge:disabled {
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+
+    .status-badge:not(:disabled):hover {
+        opacity: 0.8;
+    }
+
+    .status-executing {
+        background-color: #10B981;
+        color: white;
+    }
+
+    .status-disabled {
+        background-color: #6B7280;
+        color: white;
+    }
+
+    .status-executed {
+        background-color: #3B82F6;
+        color: white;
     }
 
     /* Dark mode support */
@@ -1420,6 +1477,63 @@
 
         .dialog-button.delete-button-confirm:hover {
             background-color: #b91c1c;
+        }
+    }
+
+    .form-row {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 0.75rem;
+        width: 100%;
+    }
+
+    .half-width {
+        flex: 1;
+        margin-bottom: 0;  /* Override the default margin-bottom from form-group */
+    }
+
+    .notification-container {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 1000;
+    }
+
+    .notification {
+        min-width: 300px;
+        padding: 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        background: white;
+        margin-top: 12px;
+        animation: slideIn 0.3s ease-out;
+    }
+
+    .notification-content {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .notification-icon {
+        margin-right: 8px;
+        font-size: 1.2rem;
+    }
+
+    .notification-message {
+        color: #374151;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        font-weight: 500;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .notification {
+            background: #1f2937;
+        }
+
+        .notification-message {
+            color: #f3f4f6;
         }
     }
 </style>
