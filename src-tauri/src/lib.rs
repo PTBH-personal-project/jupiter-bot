@@ -86,12 +86,13 @@ pub async fn run() {
     let rpc_client = setup_rpc_client();
     let jupiter_client = setup_jupiter_client();
     let jupiter_client_clone = jupiter_client.clone();
-
+    let rpc_client_clone = setup_rpc_client();
     tauri::async_runtime::spawn(async move {
         loop {
             println!("Current time: {}", chrono::Local::now());
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-            let _ = jobs::check_strategies(&db_clone, &jupiter_client_clone).await;
+            let _ =
+                jobs::check_strategies(&db_clone, &jupiter_client_clone, &rpc_client_clone).await;
         }
     });
     app.manage(AppState {

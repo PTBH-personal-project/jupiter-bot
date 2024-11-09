@@ -1,13 +1,21 @@
 use std::{fmt::format, str::FromStr};
 
-use jupiter_swap_api_client::{quote::{QuoteRequest, QuoteResponse}, JupiterSwapApiClient};
+use jupiter_swap_api_client::{
+    quote::{QuoteRequest, QuoteResponse},
+    swap::SwapRequest,
+    transaction_config::TransactionConfig,
+    JupiterSwapApiClient,
+};
 use serde::{Deserialize, Serialize};
-use solana_sdk::pubkey::Pubkey;
-use tauri::State;
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::{
+    pubkey::Pubkey,
+    signature::Keypair,
+    signer::Signer,
+    transaction::{Transaction, VersionedTransaction},
+};
 
 use crate::{format_amount, AdddressConstants};
-
-use super::AppState;
 
 #[derive(Debug, Serialize, Deserialize, sqlx::Type)]
 pub enum StrategyStatus {
@@ -83,76 +91,56 @@ impl StrategyWithFullInformation {
     pub const POW_9: f64 = 1_000_000_000.0;
     pub fn get_strategy_overview(&self) -> String {
         match self.strategy_type {
-            StrategyType::Buy => format!("Buy {} SOL for tokens {} at price {}", format_amount(self.amount, 9), self.token_name, format_amount(self.price, 9)),
-            StrategyType::Sell => format!("Sell {} {} for SOL at price {}", format_amount(self.amount, self.decimals as u8), self.token_name, self.price),
-        }
-    }
-    pub async fn execute(&self, jupiter_client: &JupiterSwapApiClient) -> StrategyExecutionResult {
-        let current_price = get_token_price_in_sol_internal(
-            jupiter_client,
-            &self.token_address,
-            self.decimals as u8,
-        )
-        .await;
-        let current_time = format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
-        if current_price.is_err() {
-            return StrategyExecutionResult {
-                tx_hash: None,
-                status: StrategyExecutionStatus::Failed,
-                message: "Get the price of the token failed".to_string(),
-                strategy_id: self.id,
-                strategy_overview: self.get_strategy_overview(),
-                current_time,
-            };
-        }
-        let current_price = current_price.unwrap() as i64;
-        match self.strategy_type {
-            StrategyType::Buy => {
-                if current_price > self.price {
-                    return StrategyExecutionResult {
-                        tx_hash: None,
-                        status: StrategyExecutionStatus::MissingPrice,
-                        message: format!("The price is higher than the price set: {} > {}", current_price, self.price),
-                        strategy_id: self.id,
-                        strategy_overview: self.get_strategy_overview(),
-                        current_time,
-                    };
-                } else {
-                    return StrategyExecutionResult {
-                        tx_hash: None,
-                        status: StrategyExecutionStatus::Success,
-                        message: "Success".to_string(),
-                        strategy_id: self.id,
-                        strategy_overview: self.get_strategy_overview(),
-                        current_time,
-                    };
-                }
-            }
-            StrategyType::Sell => {
-                if current_price < self.price {
-                    return StrategyExecutionResult {
-                        tx_hash: None,
-                        status: StrategyExecutionStatus::MissingPrice,
-                        message: format!("The price is lower than the price set: {} < {}", current_price, self.price),
-                        strategy_id: self.id,
-                        strategy_overview: self.get_strategy_overview(),
-                        current_time,
-                    };
-                } else {
-                    return StrategyExecutionResult {
-                        tx_hash: None,
-                        status: StrategyExecutionStatus::Success,
-                        message: "Success".to_string(),
-                        strategy_id: self.id,
-                        strategy_overview: self.get_strategy_overview(),
-                        current_time,
-                    };
-                }
-            }
+            StrategyType::Buy => format!(
+                "Buy {} SOL for tokens {} at price {}",
+                format_amount(self.amount, 9),
+                self.token_name,
+                format_amount(self.price, 9)
+            ),
+            StrategyType::Sell => format!(
+                "Sell {} {} for SOL at price {}",
+                format_amount(self.amount, self.decimals as u8),
+                self.token_name,
+                self.price
+            ),
         }
     }
 
-    async fn execute_buy(&self, jupiter_client: &JupiterSwapApiClient, current_time: String) -> StrategyExecutionResult {
+    pub fn get_keypair(&self) -> Keypair {
+        Keypair::from_base58_string(&self.account_private_key)
+    }
+
+    pub async fn execute(
+        &self,
+        jupiter_client: &JupiterSwapApiClient,
+        rpc_client: &RpcClient,
+    ) -> StrategyExecutionResult {
+        match self.strategy_type {
+            StrategyType::Buy => self.execute_buy(jupiter_client, rpc_client).await,
+            StrategyType::Sell => self.execute_sell(jupiter_client, rpc_client).await,
+        }
+    }
+
+    fn to_stategy_execution_with_error(
+        &self,
+        status: StrategyExecutionStatus,
+        message: String,
+    ) -> StrategyExecutionResult {
+        StrategyExecutionResult {
+            tx_hash: None,
+            status,
+            message,
+            strategy_id: self.id,
+            strategy_overview: self.get_strategy_overview(),
+            current_time: format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")),
+        }
+    }
+
+    async fn execute_buy(
+        &self,
+        jupiter_client: &JupiterSwapApiClient,
+        rpc_client: &RpcClient,
+    ) -> StrategyExecutionResult {
         let input_mint = Pubkey::from_str(AdddressConstants::WSOL_ADDRESS).unwrap();
         let output_mint = Pubkey::from_str(&self.token_address).unwrap();
         let quote_request = QuoteRequest {
@@ -163,36 +151,145 @@ impl StrategyWithFullInformation {
             ..QuoteRequest::default()
         };
         let quote_response = jupiter_client.quote(&quote_request).await;
-        StrategyExecutionResult {
-            tx_hash: None,
-            status: StrategyExecutionStatus::Success,
-            message: "Success".to_string(),
-            strategy_id: self.id,
-            strategy_overview: self.get_strategy_overview(),
-            current_time: current_time,
+        if quote_response.is_err() {
+            return self.to_stategy_execution_with_error(
+                StrategyExecutionStatus::Failed,
+                format!(
+                    "Get the quote response failed: {}",
+                    quote_response.unwrap_err()
+                ),
+            );
+        }
+        let quote_response = quote_response.unwrap();
+        let price =
+            (self.amount as u64) * (10u64.pow(self.decimals as u32)) / quote_response.out_amount;
+        if price > self.price as u64 {
+            return self.to_stategy_execution_with_error(
+                StrategyExecutionStatus::MissingPrice,
+                format!(
+                    "The price is higher than the price set: {} > {}",
+                    price, self.price
+                ),
+            );
+        }
+        let keypair = self.get_keypair();
+
+        let swap_transaction = jupiter_client
+            .swap(&SwapRequest {
+                user_public_key: keypair.pubkey(),
+                quote_response: quote_response,
+                config: TransactionConfig::default(),
+            })
+            .await;
+
+        if swap_transaction.is_err() {
+            return self.to_stategy_execution_with_error(
+                StrategyExecutionStatus::Failed,
+                "Get the swap instruction failed".to_string(),
+            );
+        }
+        let swap_transaction = swap_transaction.unwrap();
+        let data = swap_transaction.swap_transaction;
+        let transaction = bincode::deserialize::<VersionedTransaction>(&data)
+            .map_err(|e| format!("Failed to deserialize transaction: {}", e))
+            .unwrap();
+
+        let signed_transaction =
+            VersionedTransaction::try_new(transaction.message, &[&keypair]).unwrap();
+        let transaction = signed_transaction;
+
+        let signature = rpc_client.send_and_confirm_transaction(&transaction);
+
+        match signature {
+            Ok(sig) => StrategyExecutionResult {
+                tx_hash: Some(sig.to_string()),
+                status: StrategyExecutionStatus::Success,
+                message: "Transaction executed successfully".to_string(),
+                strategy_id: self.id,
+                strategy_overview: self.get_strategy_overview(),
+                current_time: format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")),
+            },
+            Err(e) => self.to_stategy_execution_with_error(
+                StrategyExecutionStatus::Failed,
+                format!("Transaction failed: {}", e),
+            ),
         }
     }
-}
 
-async fn get_token_price_in_sol_internal(
-    jupiter_client: &JupiterSwapApiClient,
-    token_address: &str,
-    token_decimals: u8,
-) -> Result<u64, String> {
-    let input_mint = Pubkey::from_str(token_address).unwrap();
-    let output_mint = Pubkey::from_str(AdddressConstants::WSOL_ADDRESS).unwrap();
-    let quote_request = QuoteRequest {
-        amount: 1 * 10u64.pow(token_decimals as u32),
-        input_mint,
-        output_mint,
-        slippage_bps: 0,
-        ..QuoteRequest::default()
-    };
-    match jupiter_client.quote(&quote_request).await {
-        Ok(quote_response) => Ok(quote_response.out_amount),
-        Err(e) => {
-            println!("Error getting token price: {}", e);
-            Err(e.to_string())
+    async fn execute_sell(
+        &self,
+        jupiter_client: &JupiterSwapApiClient,
+        rpc_client: &RpcClient,
+    ) -> StrategyExecutionResult {
+        let input_mint = Pubkey::from_str(&self.token_address).unwrap();
+        let output_mint = Pubkey::from_str(AdddressConstants::WSOL_ADDRESS).unwrap();
+        let quote_request = QuoteRequest {
+            amount: self.amount as u64,
+            input_mint,
+            output_mint,
+            slippage_bps: self.slippage as u16,
+            ..QuoteRequest::default()
+        };
+        let quote_response = jupiter_client.quote(&quote_request).await;
+        if quote_response.is_err() {
+            return self.to_stategy_execution_with_error(
+                StrategyExecutionStatus::Failed,
+                "Get the quote response failed".to_string(),
+            );
+        }
+        let quote_response = quote_response.unwrap();
+        let price = (quote_response.out_amount as u64) * (10u64.pow(self.decimals as u32))
+            / self.amount as u64;
+        if price < self.price as u64 {
+            return self.to_stategy_execution_with_error(
+                StrategyExecutionStatus::MissingPrice,
+                format!(
+                    "The price is lower than the price set: {} < {}",
+                    price, self.price
+                ),
+            );
+        }
+        let keypair = self.get_keypair();
+
+        let swap_instruction = jupiter_client
+            .swap_instructions(&SwapRequest {
+                user_public_key: keypair.pubkey(),
+                quote_response: quote_response,
+                config: TransactionConfig::default(),
+            })
+            .await;
+
+        if swap_instruction.is_err() {
+            return self.to_stategy_execution_with_error(
+                StrategyExecutionStatus::Failed,
+                "Get the swap instruction failed".to_string(),
+            );
+        }
+        let swap_instructions = swap_instruction.unwrap().swap_instruction;
+        let recent_blockhash = rpc_client.get_latest_blockhash().unwrap();
+
+        let transaction = Transaction::new_signed_with_payer(
+            &[swap_instructions],
+            Some(&keypair.pubkey()),
+            &[&keypair],
+            recent_blockhash,
+        );
+
+        let signature = rpc_client.send_and_confirm_transaction(&transaction);
+
+        match signature {
+            Ok(sig) => StrategyExecutionResult {
+                tx_hash: Some(sig.to_string()),
+                status: StrategyExecutionStatus::Success,
+                message: "Transaction executed successfully".to_string(),
+                strategy_id: self.id,
+                strategy_overview: self.get_strategy_overview(),
+                current_time: format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")),
+            },
+            Err(e) => self.to_stategy_execution_with_error(
+                StrategyExecutionStatus::Failed,
+                format!("Transaction failed: {}", e),
+            ),
         }
     }
 }

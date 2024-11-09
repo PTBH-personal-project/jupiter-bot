@@ -1,9 +1,11 @@
 use jupiter_swap_api_client::JupiterSwapApiClient;
+use solana_client::rpc_client::RpcClient;
 
 use crate::types::*;
 pub async fn check_strategies(
     db: &Db,
     jupiter_client: &JupiterSwapApiClient,
+    rpc_client: &RpcClient,
 ) -> Result<(), String> {
     // Query all active strategies
     let strategy = sqlx::query_as::<_, StrategyWithFullInformation>(
@@ -20,7 +22,7 @@ pub async fn check_strategies(
 
     match strategy {
         Ok(strategy) => {
-            let execute_result = strategy.execute(jupiter_client).await;
+            let execute_result = strategy.execute(jupiter_client, rpc_client).await;
             println!("{:?}", execute_result);
         }
         Err(e) => {
