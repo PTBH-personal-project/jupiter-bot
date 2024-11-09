@@ -188,8 +188,7 @@ impl StrategyWithFullInformation {
                 "Get the swap instruction failed".to_string(),
             );
         }
-        let swap_transaction = swap_transaction.unwrap();
-        let data = swap_transaction.swap_transaction;
+        let data = swap_transaction.unwrap().swap_transaction;
         let transaction = bincode::deserialize::<VersionedTransaction>(&data)
             .map_err(|e| format!("Failed to deserialize transaction: {}", e))
             .unwrap();
@@ -251,29 +250,28 @@ impl StrategyWithFullInformation {
         }
         let keypair = self.get_keypair();
 
-        let swap_instruction = jupiter_client
-            .swap_instructions(&SwapRequest {
+        let swap_transaction = jupiter_client
+            .swap(&SwapRequest {
                 user_public_key: keypair.pubkey(),
                 quote_response: quote_response,
                 config: TransactionConfig::default(),
             })
             .await;
 
-        if swap_instruction.is_err() {
+        if swap_transaction.is_err() {
             return self.to_stategy_execution_with_error(
                 StrategyExecutionStatus::Failed,
                 "Get the swap instruction failed".to_string(),
             );
         }
-        let swap_instructions = swap_instruction.unwrap().swap_instruction;
-        let recent_blockhash = rpc_client.get_latest_blockhash().unwrap();
+        let data = swap_transaction.unwrap().swap_transaction;
+        let transaction = bincode::deserialize::<VersionedTransaction>(&data)
+            .map_err(|e| format!("Failed to deserialize transaction: {}", e))
+            .unwrap();
 
-        let transaction = Transaction::new_signed_with_payer(
-            &[swap_instructions],
-            Some(&keypair.pubkey()),
-            &[&keypair],
-            recent_blockhash,
-        );
+        let signed_transaction =
+            VersionedTransaction::try_new(transaction.message, &[&keypair]).unwrap();
+        let transaction = signed_transaction;
 
         let signature = rpc_client.send_and_confirm_transaction(&transaction);
 

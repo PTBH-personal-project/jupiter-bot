@@ -164,7 +164,7 @@
                         ? Math.trunc(amount * Math.pow(10, 9))
                         : Math.trunc(amount * Math.pow(10, selectedToken.decimals)),
                 prioritizationFee,
-                slippage: Math.trunc(slippage * 10000),
+                slippage: Math.trunc(slippage * 100),
             });
 
             await loadStrategies();
@@ -317,7 +317,7 @@
                                           ).toFixed(strategy.decimals)
                                       ).toString()}
                             </td><td>{strategy.intervalTime}s</td>
-                            <td>{(strategy.slippage / 10000).toFixed(2)}%</td>
+                            <td>{(strategy.slippage / 100).toFixed(2)}%</td>
                             <td>
                                 <Tooltip
                                     text={strategy.status === "Executing"
