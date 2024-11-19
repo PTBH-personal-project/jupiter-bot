@@ -27,6 +27,7 @@
                 <li><a href="/tokens">Tokens</a></li>
                 <li><a href="/rpcs">Rpcs</a></li>
                 <li><a href="/strategies">Strategies</a></li>
+                <li><a href="/logs">Logs</a></li>
                 <!-- <li><a href="/contact">Contact</a></li> -->
             </ul>
         </nav>

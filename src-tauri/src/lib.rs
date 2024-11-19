@@ -16,6 +16,7 @@ use solana_sdk::{
     pubkey::{self, Pubkey},
 };
 pub use strategies::*;
+pub use jobs::*;
 use tauri::{Manager, State};
 use tokens::*;
 pub use types::*;
@@ -76,7 +77,8 @@ pub async fn run() {
             delete_strategy,
             toggle_strategy_status,
             get_all_strategies,
-            get_all_strategies_with_full_information
+            get_all_strategies_with_full_information,
+            get_strategy_logs,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");

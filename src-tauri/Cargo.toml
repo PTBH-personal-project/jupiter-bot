@@ -35,6 +35,7 @@ spl-token-2022 = "5.0.2"
 mpl-token-metadata = "=5.0.0-beta.0"
 chrono = "0.4.38"
 bincode = "1.3.3"
+base64 = "0.22.1"
 
 [patch.crates-io.aes-gcm-siv]
 git = "https://github.com/RustCrypto/AEADs"
