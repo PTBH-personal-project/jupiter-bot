@@ -172,18 +172,21 @@ impl StrategyWithFullInformation {
         }
         let keypair = self.get_keypair();
 
+        let mut config = TransactionConfig::default();
+        config.prioritization_fee_lamports = Some(PrioritizationFeeLamports::Auto);
+        config.dynamic_compute_unit_limit = true;
         let swap_transaction = jupiter_client
             .swap(&SwapRequest {
                 user_public_key: keypair.pubkey(),
                 quote_response: quote_response,
-                config: TransactionConfig::default(),
+                config,
             })
             .await;
 
         if swap_transaction.is_err() {
             return self.to_stategy_execution_with_error(
                 StrategyExecutionStatus::Failed,
-                "Get the swap instruction failed".to_string(),
+                format!("Get the swap instruction failed"),
             );
         }
         let data = swap_transaction.unwrap().swap_transaction;
@@ -193,9 +196,9 @@ impl StrategyWithFullInformation {
 
         let signed_transaction =
             VersionedTransaction::try_new(transaction.message, &[&keypair]).unwrap();
-        let transaction = signed_transaction;
+        // let transaction = signed_transaction;
 
-        let signature = rpc_client.send_and_confirm_transaction(&transaction);
+        let signature = rpc_client.send_and_confirm_transaction(&signed_transaction);
 
         match signature {
             Ok(sig) => StrategyExecutionResult {
@@ -236,7 +239,6 @@ impl StrategyWithFullInformation {
 
         let quote_response = jupiter_client.quote(&quote_request).await;
 
-        println!("quote_response: {:?}", quote_response);
         if quote_response.is_err() {
             return self.to_stategy_execution_with_error(
                 StrategyExecutionStatus::Failed,
@@ -286,12 +288,12 @@ impl StrategyWithFullInformation {
         let signed_transaction =
             VersionedTransaction::try_new(transaction.message, &[&keypair]).unwrap();
 
-        let transaction = signed_transaction;
+        // let transaction = signed_transaction;
 
-        let serialized = bincode::serialize(&transaction).unwrap();
-        println!("Transaction (base64): {}", base64::encode(&serialized));
+        // let serialized = bincode::serialize(&transaction).unwrap();
+        // println!("Transaction (base64): {}", base64::encode(&serialized));
 
-        let signature = rpc_client.send_and_confirm_transaction(&transaction);
+        let signature = rpc_client.send_and_confirm_transaction(&signed_transaction);
 
         match signature {
             Ok(sig) => StrategyExecutionResult {
