@@ -12,6 +12,9 @@ pub async fn add_strategy(
     prioritization_fee: i64,
     slippage: i64,
 ) -> Result<(), String> {
+    if slippage > 10000 {
+        return Err("Slippage cannot be greater than 100%".to_string());
+    }
     let db = &state.db;
 
     // Calculate next_time_execute as current time + interval_time
