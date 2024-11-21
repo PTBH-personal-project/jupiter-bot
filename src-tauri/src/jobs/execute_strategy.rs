@@ -8,7 +8,7 @@ pub async fn check_strategies(
     rpc_client: &RpcClient,
 ) -> Result<(), String> {
     let strategy = sqlx::query_as::<_, StrategyWithFullInformation>(
-        "SELECT s.*, t.logo_uri, t.decimals, t.name as token_name, a.name as account_name 
+        "SELECT s.*, t.logo_uri, t.decimals, t.name as token_name, a.name as account_name, a.public_key as account_public_key
          FROM strategies s
          JOIN tokens t ON s.token_address = t.address 
          JOIN accounts a ON s.account_private_key = a.private_key
@@ -21,10 +21,10 @@ pub async fn check_strategies(
 
     match strategy {
         Ok(strategy) => {
-            let execute_result = strategy.execute(jupiter_client, rpc_client).await;
+            let execute_result = strategy.execute(db, jupiter_client, rpc_client).await;
             // Insert log into database
             sqlx::query(
-                "INSERT INTO strategy_logs (strategy_id, message, status) VALUES (?, ?, ?)"
+                "INSERT INTO strategy_logs (strategy_id, message, status, timestamp) VALUES (?, ?, ?, datetime('now', 'localtime'))"
             )
             .bind(strategy.id)
             .bind(execute_result.message)

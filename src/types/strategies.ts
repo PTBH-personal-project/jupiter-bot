@@ -31,4 +31,5 @@ export type StrategyWithFullInformation = {
     decimals: number;
     tokenName: string;
     accountName: string;
+    accountPublicKey: string;
 };

@@ -6,6 +6,7 @@
     import Tooltip from "../../components/Tooltip.svelte";
     import type { TokenInfo } from "../../types/tokens";
     import { removeNullChars } from "$lib/utils/helpers";
+    import { txLink } from "$lib/utils/link_utils";
     let showAddDialog = false;
     let strategies: StrategyWithFullInformation[] = [];
     let isLoading = false;
@@ -43,6 +44,10 @@
 
     // Add new state variable for account balance
     let selectedAccountBalance: number | null = null;
+
+    // Add these new state variables
+    let showDetailsDialog = false;
+    let selectedStrategy: StrategyWithFullInformation | null = null;
 
     async function fetchTokenPrice(tokenAddress: string, tokenDecimals: number) {
         try {
@@ -248,6 +253,33 @@
             showNotification("Failed to update strategy status: " + err, true);
         }
     }
+
+    // Add this function to handle copying to clipboard
+    async function copyToClipboard(text: string, type: 'account' | 'token' | 'transaction' = 'account') {
+        try {
+            await navigator.clipboard.writeText(text);
+            const messageMap = {
+                account: 'Account address',
+                token: 'Token address',
+                transaction: 'Transaction hash'
+            };
+            showNotification(`${messageMap[type]} copied to clipboard`);
+        } catch (err) {
+            console.error("Failed to copy text: ", err);
+            showNotification("Failed to copy to clipboard", true);
+        }
+    }
+
+    // Add this function to handle showing strategy details
+    function showStrategyDetails(strategy: StrategyWithFullInformation) {
+        selectedStrategy = strategy;
+        showDetailsDialog = true;
+    }
+
+    function closeDetailsDialog() {
+        showDetailsDialog = false;
+        selectedStrategy = null;
+    }
 </script>
 
 <main class="container">
@@ -269,6 +301,7 @@
                 <thead>
                     <tr>
                         <th>Type</th>
+                        <th>Account</th>
                         <th>Token</th>
                         <th>Price</th>
                         <th>Amount</th>
@@ -282,7 +315,27 @@
                     {#each strategies as strategy}
                         <tr>
                             <td>{strategy.strategyType}</td>
-                            <td class="address-cell">
+                            <td 
+                                class="account-cell clickable" 
+                                on:click={() => copyToClipboard(strategy.accountPublicKey, 'account')}
+                                on:keydown={(e) => e.key === 'Enter' && copyToClipboard(strategy.accountPublicKey, 'account')}
+                                tabindex="0"
+                                role="button"
+                                title="Click to copy public key"
+                            >
+                                <div class="account-info">
+                                    <span class="account-name">{strategy.accountName}</span>
+                                    <span class="account-address">({shortenAddress(strategy.accountPublicKey)})</span>
+                                </div>
+                            </td>
+                            <td 
+                                class="address-cell clickable" 
+                                on:click={() => copyToClipboard(strategy.tokenAddress, 'token')}
+                                on:keydown={(e) => e.key === 'Enter' && copyToClipboard(strategy.tokenAddress, 'token')}
+                                tabindex="0"
+                                role="button"
+                                title="Click to copy token address"
+                            >
                                 {#if strategy.tokenName}
                                     <div class="token-info">
                                         <div class="token-name-with-logo">
@@ -337,6 +390,28 @@
                             </td>
                             <td>
                                 <div class="action-buttons">
+                                    <Tooltip text="View details">
+                                        <button
+                                            class="icon-button info-button"
+                                            on:click={() => showStrategyDetails(strategy)}
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            >
+                                                <circle cx="12" cy="12" r="10" />
+                                                <line x1="12" y1="16" x2="12" y2="12" />
+                                                <line x1="12" y1="8" x2="12" y2="8" />
+                                            </svg>
+                                        </button>
+                                    </Tooltip>
                                     <Tooltip text="Delete strategy">
                                         <button
                                             class="icon-button delete-button"
@@ -643,6 +718,104 @@
                             Delete
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    {#if showDetailsDialog && selectedStrategy}
+        <div class="dialog-overlay" on:click|self={closeDetailsDialog}>
+            <div class="dialog details-dialog">
+                <div class="dialog-header">
+                    <h2>Strategy Details</h2>
+                    <button class="close-button" on:click={closeDetailsDialog}>×</button>
+                </div>
+                <div class="dialog-content">
+                    <div class="form-group">
+                        <label class="form-label">Type</label>
+                        <div class="form-value">{selectedStrategy.strategyType}</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Account</label>
+                        <div class="form-value">{selectedStrategy.accountName}</div>
+                        <div class="full-address clickable" 
+                             on:click={() => copyToClipboard(selectedStrategy?.accountPublicKey || 'Unknown', 'account')}
+                             title="Click to copy">
+                            {selectedStrategy.accountPublicKey}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Token</label>
+                        <div class="form-value">{selectedStrategy.tokenName}</div>
+                        <div class="full-address clickable" 
+                             on:click={() => copyToClipboard(selectedStrategy?.tokenAddress || 'Unknown', 'token')}
+                             title="Click to copy">
+                            {selectedStrategy.tokenAddress}
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label class="form-label">Price</label>
+                            <div class="form-value">
+                                {(selectedStrategy.price / Math.pow(10, 9)).toFixed(9)} SOL
+                            </div>
+                        </div>
+                        <div class="form-group half-width">
+                            <label class="form-label">Amount</label>
+                            <div class="form-value">
+                                {selectedStrategy.strategyType === "Buy"
+                                    ? `${(selectedStrategy.amount / Math.pow(10, 9)).toFixed(9)} SOL`
+                                    : `${(selectedStrategy.amount / Math.pow(10, selectedStrategy.decimals)).toFixed(selectedStrategy.decimals)} Tokens`}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label class="form-label">Interval</label>
+                            <div class="form-value">{selectedStrategy.intervalTime} seconds</div>
+                        </div>
+                        <div class="form-group half-width">
+                            <label class="form-label">Slippage</label>
+                            <div class="form-value">{(selectedStrategy.slippage / 100).toFixed(2)}%</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <div class="form-value">
+                            <span class="status-badge status-{selectedStrategy.status.toLowerCase()}">
+                                {selectedStrategy.status}
+                            </span>
+                        </div>
+                    </div>
+
+                    {#if selectedStrategy.txHash}
+                        <div class="form-group">
+                            <label class="form-label">Executed Transaction</label>
+                            <div class="tx-hash-container">
+                                <div class="tx-hash clickable" 
+                                     on:click={() => copyToClipboard(selectedStrategy?.txHash || '', 'transaction')}
+                                     title="Click to copy transaction hash">
+                                    <span class="tx-hash-text">{selectedStrategy.txHash}</span>
+                                    <a href={`${txLink(selectedStrategy.txHash)}`}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="tx-link"
+                                       title="View on Solscan">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                            <polyline points="15 3 21 3 21 9"></polyline>
+                                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                                        </svg>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
             </div>
         </div>
@@ -1534,7 +1707,7 @@
 
     .form-row {
         display: flex;
-        gap: 1rem;
+        gap: 0.75rem;
         margin-bottom: 0.75rem;
         width: 100%;
     }
@@ -1586,6 +1759,253 @@
 
         .notification-message {
             color: #f3f4f6;
+        }
+    }
+
+    .account-cell {
+        font-family: monospace;
+        font-size: 0.9rem;
+    }
+
+    .account-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .account-name {
+        font-weight: 500;
+        color: #374151;
+    }
+
+    .account-address {
+        font-size: 0.8rem;
+        color: #666;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .account-name {
+            color: #e5e7eb;
+        }
+
+        .account-address {
+            color: #9ca3af;
+        }
+    }
+
+    .clickable {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .clickable:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .clickable:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+    }
+
+    .info-button {
+        color: #3b82f6;
+    }
+
+    .info-button:hover {
+        background: rgba(59, 130, 246, 0.1);
+        color: #2563eb;
+    }
+
+    .details-dialog {
+        max-width: 800px;
+        width: 90%;
+    }
+
+    .details-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        padding: 1.5rem;
+    }
+
+    .detail-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .detail-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: 500;
+    }
+
+    .detail-value {
+        font-size: 1rem;
+        color: #111827;
+        font-weight: 500;
+    }
+
+    .detail-subtext {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: normal;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .detail-label {
+            color: #9ca3af;
+        }
+
+        .detail-value {
+            color: #f3f4f6;
+        }
+
+        .detail-subtext {
+            color: #9ca3af;
+        }
+
+        .info-button {
+            color: #60a5fa;
+        }
+
+        .info-button:hover {
+            background: rgba(96, 165, 250, 0.1);
+            color: #93c5fd;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .details-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .full-address {
+        font-family: monospace;
+        font-size: 0.85rem;
+        word-break: break-all;
+        padding: 0.375rem;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 0.375rem;
+        margin-top: 0.125rem;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .full-address {
+            background: rgba(255, 255, 255, 0.05);
+        }
+    }
+
+    .form-group {
+        margin-bottom: 0.75rem;
+    }
+
+    .form-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 0.125rem;
+    }
+
+    .form-value {
+        font-size: 1rem;
+        color: #111827;
+        padding: 0.125rem 0;
+    }
+
+    .full-address {
+        font-family: monospace;
+        font-size: 0.85rem;
+        word-break: break-all;
+        padding: 0.375rem;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 0.375rem;
+        margin-top: 0.125rem;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .form-label {
+            color: #9ca3af;
+        }
+
+        .form-value {
+            color: #f3f4f6;
+        }
+
+        .full-address {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+    }
+
+    .dialog-content {
+        padding: 0.75rem;
+    }
+
+    .details-dialog {
+        max-width: 600px;
+        width: 90%;
+        background: white;
+        border-radius: 0.75rem;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .details-dialog {
+            background: #1f2937;
+        }
+    }
+
+    .tx-hash-container {
+        margin-top: 0.25rem;
+        width: 100%;
+    }
+
+    .tx-hash {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        background: rgba(0, 0, 0, 0.08);
+        border-radius: 0.375rem;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        gap: 0.75rem;
+    }
+
+    .tx-hash-text {
+        color: #1f2937;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+        letter-spacing: 0.02em;
+    }
+
+    .tx-link {
+        color: #3b82f6;
+        text-decoration: none;
+        transition: color 0.2s;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .tx-hash {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .tx-hash-text {
+            color: #e5e7eb;
         }
     }
 </style>

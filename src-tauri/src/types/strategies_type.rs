@@ -15,6 +15,8 @@ use base64;
 
 use crate::{format_amount, AdddressConstants};
 
+use super::Db;
+
 #[derive(Debug, Serialize, Deserialize, sqlx::Type)]
 pub enum StrategyStatus {
     Executing,
@@ -66,6 +68,7 @@ pub struct StrategyWithFullInformation {
     pub decimals: i64,
     pub token_name: String,
     pub account_name: String,
+    pub account_public_key: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::Type)]
@@ -110,12 +113,27 @@ impl StrategyWithFullInformation {
 
     pub async fn execute(
         &self,
+        db: &Db,
         jupiter_client: &JupiterSwapApiClient,
         rpc_client: &RpcClient,
     ) -> StrategyExecutionResult {
+        println!("Executing strategy: {} {}", self.id, self.next_time_execute);
+        sqlx::query(
+            "UPDATE strategies SET next_time_execute = next_time_execute + ? WHERE id = ?"
+        )
+        .bind(self.interval_time)
+        .bind(self.id)
+        .execute(db)
+        .await
+        .map_err(|e| {
+            return self.to_stategy_execution_with_error(
+                StrategyExecutionStatus::Failed,
+                format!("Failed to update next execution time: {}", e),
+            );
+        }).unwrap();
         match self.strategy_type {
-            StrategyType::Buy => self.execute_buy(jupiter_client, rpc_client).await,
-            StrategyType::Sell => self.execute_sell(jupiter_client, rpc_client).await,
+            StrategyType::Buy => self.execute_buy(&db, jupiter_client, rpc_client).await,
+            StrategyType::Sell => self.execute_sell(&db, jupiter_client, rpc_client).await,
         }
     }
 
@@ -130,15 +148,17 @@ impl StrategyWithFullInformation {
             message,
             strategy_id: self.id,
             strategy_overview: self.get_strategy_overview(),
-            current_time: format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")),
+            current_time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         }
     }
 
     async fn execute_buy(
         &self,
+        db: &Db,
         jupiter_client: &JupiterSwapApiClient,
         rpc_client: &RpcClient,
     ) -> StrategyExecutionResult {
+        // Update next_time_execute by adding interval_time to current next_time_execute
         let input_mint = Pubkey::from_str(AdddressConstants::WSOL_ADDRESS).unwrap();
         let output_mint = Pubkey::from_str(&self.token_address).unwrap();
         let quote_request = QuoteRequest {
@@ -201,14 +221,23 @@ impl StrategyWithFullInformation {
         let signature = rpc_client.send_and_confirm_transaction(&signed_transaction);
 
         match signature {
-            Ok(sig) => StrategyExecutionResult {
-                tx_hash: Some(sig.to_string()),
-                status: StrategyExecutionStatus::Success,
-                message: "Transaction executed successfully".to_string(),
-                strategy_id: self.id,
-                strategy_overview: self.get_strategy_overview(),
-                current_time: format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")),
-            },
+            Ok(sig) => {
+                sqlx::query("UPDATE strategies SET tx_hash = ?, status = 'Executed' WHERE id = ?")
+                    .bind(sig.to_string())
+                    .bind(self.id)
+                    .execute(db)
+                    .await
+                    .map_err(|e| self.to_stategy_execution_with_error(StrategyExecutionStatus::Failed, format!("Failed to update strategy status: {}", e)))
+                    .unwrap();
+                StrategyExecutionResult {
+                    tx_hash: Some(sig.to_string()),
+                    status: StrategyExecutionStatus::Success,
+                    message: "Transaction executed successfully".to_string(),
+                    strategy_id: self.id,
+                    strategy_overview: self.get_strategy_overview(),
+                    current_time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                }
+            }
             Err(e) => {
                 println!("transaction error: {:?}", e.get_transaction_error());
                 self.to_stategy_execution_with_error(
@@ -221,9 +250,11 @@ impl StrategyWithFullInformation {
 
     async fn execute_sell(
         &self,
+        db: &Db,
         jupiter_client: &JupiterSwapApiClient,
         rpc_client: &RpcClient,
     ) -> StrategyExecutionResult {
+
         let input_mint = Pubkey::from_str(&self.token_address).unwrap();
         let output_mint = Pubkey::from_str(AdddressConstants::WSOL_ADDRESS).unwrap();
         let mut request = QuoteRequest::default();
@@ -288,22 +319,26 @@ impl StrategyWithFullInformation {
         let signed_transaction =
             VersionedTransaction::try_new(transaction.message, &[&keypair]).unwrap();
 
-        // let transaction = signed_transaction;
-
-        // let serialized = bincode::serialize(&transaction).unwrap();
-        // println!("Transaction (base64): {}", base64::encode(&serialized));
-
         let signature = rpc_client.send_and_confirm_transaction(&signed_transaction);
 
         match signature {
-            Ok(sig) => StrategyExecutionResult {
+            Ok(sig) => {
+                sqlx::query("UPDATE strategies SET tx_hash = ?, status = 'Executed' WHERE id = ?")
+                    .bind(sig.to_string())
+                    .bind(self.id)
+                    .execute(db)
+                    .await
+                    .map_err(|e| self.to_stategy_execution_with_error(StrategyExecutionStatus::Failed, format!("Failed to update strategy status: {}", e)))
+                    .unwrap();
+                StrategyExecutionResult {
                 tx_hash: Some(sig.to_string()),
                 status: StrategyExecutionStatus::Success,
                 message: "Transaction executed successfully".to_string(),
                 strategy_id: self.id,
                 strategy_overview: self.get_strategy_overview(),
-                current_time: format!("{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")),
-            },
+                current_time: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            }
+        },
             Err(e) => {
                 println!("transaction error: {:?}", e.get_transaction_error());
                 self.to_stategy_execution_with_error(
