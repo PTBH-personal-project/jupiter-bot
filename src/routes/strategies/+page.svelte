@@ -6,6 +6,7 @@
     import Tooltip from "../../components/Tooltip.svelte";
     import type { TokenInfo } from "../../types/tokens";
     import { removeNullChars } from "$lib/utils/helpers";
+    import { txLink } from "$lib/utils/link_utils";
     let showAddDialog = false;
     let strategies: StrategyWithFullInformation[] = [];
     let isLoading = false;
@@ -37,12 +38,20 @@
     let tokens: TokenInfo[] = [];
 
     let isTokenDropdownOpen = false;
-    let selectedToken: TokenInfo | null = null;
+    let selectedToken: Omit<TokenInfo, 'totalSupply' | 'uri'> | null = null;
 
     let selectedTokenPrice: number | null = null;
 
     // Add new state variable for account balance
     let selectedAccountBalance: number | null = null;
+
+    // Add these new state variables
+    let showDetailsDialog = false;
+    let selectedStrategy: StrategyWithFullInformation | null = null;
+
+    // Add new state variables
+    let showUpdateDialog = false;
+    let strategyToUpdate: StrategyWithFullInformation | null = null;
 
     async function fetchTokenPrice(tokenAddress: string, tokenDecimals: number) {
         try {
@@ -248,6 +257,116 @@
             showNotification("Failed to update strategy status: " + err, true);
         }
     }
+
+    // Add this function to handle copying to clipboard
+    async function copyToClipboard(text: string, type: 'account' | 'token' | 'transaction' = 'account') {
+        try {
+            await navigator.clipboard.writeText(text);
+            const messageMap = {
+                account: 'Account address',
+                token: 'Token address',
+                transaction: 'Transaction hash'
+            };
+            showNotification(`${messageMap[type]} copied to clipboard`);
+        } catch (err) {
+            console.error("Failed to copy text: ", err);
+            showNotification("Failed to copy to clipboard", true);
+        }
+    }
+
+    // Add this function to handle showing strategy details
+    function showStrategyDetails(strategy: StrategyWithFullInformation) {
+        selectedStrategy = strategy;
+        showDetailsDialog = true;
+    }
+
+    function closeDetailsDialog() {
+        showDetailsDialog = false;
+        selectedStrategy = null;
+    }
+
+    function showUpdateStrategy(strategy: StrategyWithFullInformation) {
+        strategyToUpdate = strategy;
+        // Pre-fill the form fields with current strategy values
+        strategyType = strategy.strategyType;
+        intervalTime = strategy.intervalTime;
+        price = strategy.price / Math.pow(10, 9);  // Convert from lamports to SOL
+        amount = strategy.strategyType === "Buy" 
+            ? strategy.amount / Math.pow(10, 9)  // Convert from lamports to SOL
+            : strategy.amount / Math.pow(10, strategy.decimals);  // Convert using token decimals
+        prioritizationFee = strategy.prioritizationFee;
+        slippage = strategy.slippage / 100;
+        selectedAccountId = strategy.accountName.toString();
+        tokenAddress = strategy.tokenAddress;
+        selectedToken = {
+            address: strategy.tokenAddress,
+            name: strategy.tokenName,
+            decimals: strategy.decimals,
+            logoUri: "",
+            symbol: strategy.tokenSymbol
+        };
+        showUpdateDialog = true;
+    }
+
+    function closeUpdateDialog() {
+        showUpdateDialog = false;
+        strategyToUpdate = null;
+        resetForm();
+    }
+
+    async function handleUpdate() {
+        isLoading = true;
+        error = null;
+
+        try {
+            if (!strategyToUpdate) {
+                throw new Error("No strategy selected for update");
+            }
+
+            const selectedAccount = accounts.find((acc) => acc.name.toString() === selectedAccountId);
+            if (!selectedAccount) {
+                throw new Error("Please select an account");
+            }
+            if (!selectedToken) {
+                throw new Error("Please select a token");
+            }
+
+            await invoke("update_strategy", {
+                strategyId: strategyToUpdate.id,
+                intervalTime,
+                price: Math.trunc(price * Math.pow(10, 9)),
+                amount: strategyType === "Buy"
+                    ? Math.trunc(amount * Math.pow(10, 9))
+                    : Math.trunc(amount * Math.pow(10, selectedToken.decimals)),
+                prioritizationFee,
+                slippage: Math.trunc(slippage * 100),
+            });
+
+            await loadStrategies();
+            showNotification("Strategy updated successfully");
+            closeUpdateDialog();
+        } catch (err) {
+            console.error("Error updating strategy:", err);
+            error = err instanceof Error ? err.message : String(err);
+            showNotification("Failed to update strategy: " + err, true);
+        } finally {
+            isLoading = false;
+        }
+    }
+
+    // Add this new function near other async functions
+    async function getTokenBalance(tokenAddress: string, accountPublicKey: string, decimals: number): Promise<number | null> {
+        try {
+            const balance = await invoke("get_account_balance", { 
+                publicKey: accountPublicKey, 
+                tokenAddress,
+            });
+            return Number(balance) / Math.pow(10, decimals);
+        } catch (err) {
+            console.error("Error fetching token balance:", err);
+            return null;
+        }
+    }
 </script>
 
 <main class="container">
@@ -269,7 +388,9 @@
                 <thead>
                     <tr>
                         <th>Type</th>
+                        <th>Account</th>
                         <th>Token</th>
+                        <th>Balance</th>
                         <th>Price</th>
                         <th>Amount</th>
                         <th>Interval</th>
@@ -282,7 +403,27 @@
                     {#each strategies as strategy}
                         <tr>
                             <td>{strategy.strategyType}</td>
-                            <td class="address-cell">
+                            <td 
+                                class="account-cell clickable" 
+                                on:click={() => copyToClipboard(strategy.accountPublicKey, 'account')}
+                                on:keydown={(e) => e.key === 'Enter' && copyToClipboard(strategy.accountPublicKey, 'account')}
+                                tabindex="0"
+                                role="button"
+                                title="Click to copy public key"
+                            >
+                                <div class="account-info">
+                                    <span class="account-name">{strategy.accountName}</span>
+                                    <span class="account-address">({shortenAddress(strategy.accountPublicKey)})</span>
+                                </div>
+                            </td>
+                            <td 
+                                class="address-cell clickable" 
+                                on:click={() => copyToClipboard(strategy.tokenAddress, 'token')}
+                                on:keydown={(e) => e.key === 'Enter' && copyToClipboard(strategy.tokenAddress, 'token')}
+                                tabindex="0"
+                                role="button"
+                                title="Click to copy token address"
+                            >
                                 {#if strategy.tokenName}
                                     <div class="token-info">
                                         <div class="token-name-with-logo">
@@ -304,6 +445,24 @@
                                 {:else}
                                     {shortenAddress(strategy.tokenAddress)}
                                 {/if}
+                            </td>
+                            <td>
+                                {#key Date.now()}
+                                    {#await getTokenBalance(strategy.tokenAddress, strategy.accountPublicKey, strategy.decimals)}
+                                        <span class="loading-balance">Loading...</span>
+                                    {:then balance}
+                                        {#if balance !== null}
+                                            <span 
+                                                class="token-balance clickable" 
+                                                on:click={() => getTokenBalance(strategy.tokenAddress, strategy.accountPublicKey, strategy.decimals)}
+                                            >
+                                                {balance.toFixed(strategy.decimals)} {strategy.tokenSymbol}
+                                            </span>
+                                        {:else}
+                                            <span class="error-balance">Error</span>
+                                        {/if}
+                                    {/await}
+                                {/key}
                             </td>
                             <td>{(strategy.price / Math.pow(10, 9)).toFixed(9)}</td>
                             <td>
@@ -337,6 +496,50 @@
                             </td>
                             <td>
                                 <div class="action-buttons">
+                                    <Tooltip text="View details">
+                                        <button
+                                            class="icon-button info-button"
+                                            on:click={() => showStrategyDetails(strategy)}
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            >
+                                                <circle cx="12" cy="12" r="10" />
+                                                <line x1="12" y1="16" x2="12" y2="12" />
+                                                <line x1="12" y1="8" x2="12" y2="8" />
+                                            </svg>
+                                        </button>
+                                    </Tooltip>
+                                    <Tooltip text="Edit strategy">
+                                        <button
+                                            class="icon-button edit-button"
+                                            on:click={() => showUpdateStrategy(strategy)}
+                                            title="Edit Strategy"
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            >
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                            </svg>
+                                        </button>
+                                    </Tooltip>
                                     <Tooltip text="Delete strategy">
                                         <button
                                             class="icon-button delete-button"
@@ -643,6 +846,226 @@
                             Delete
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    {#if showDetailsDialog && selectedStrategy}
+        <div class="dialog-overlay" on:click|self={closeDetailsDialog}>
+            <div class="dialog details-dialog">
+                <div class="dialog-header">
+                    <h2>Strategy Details</h2>
+                    <button class="close-button" on:click={closeDetailsDialog}>×</button>
+                </div>
+                <div class="dialog-content">
+                    <div class="form-group">
+                        <label class="form-label">Type</label>
+                        <div class="form-value">{selectedStrategy.strategyType}</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Account</label>
+                        <div class="form-value">{selectedStrategy.accountName}</div>
+                        <div class="full-address clickable" 
+                             on:click={() => copyToClipboard(selectedStrategy?.accountPublicKey || 'Unknown', 'account')}
+                             title="Click to copy">
+                            {selectedStrategy.accountPublicKey}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Token</label>
+                        <div class="form-value">{selectedStrategy.tokenName}</div>
+                        <div class="full-address clickable" 
+                             on:click={() => copyToClipboard(selectedStrategy?.tokenAddress || 'Unknown', 'token')}
+                             title="Click to copy">
+                            {selectedStrategy.tokenAddress}
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label class="form-label">Price</label>
+                            <div class="form-value">
+                                {(selectedStrategy.price / Math.pow(10, 9)).toFixed(9)} SOL
+                            </div>
+                        </div>
+                        <div class="form-group half-width">
+                            <label class="form-label">Amount</label>
+                            <div class="form-value">
+                                {selectedStrategy.strategyType === "Buy"
+                                    ? `${(selectedStrategy.amount / Math.pow(10, 9)).toFixed(9)} SOL`
+                                    : `${(selectedStrategy.amount / Math.pow(10, selectedStrategy.decimals)).toFixed(selectedStrategy.decimals)} Tokens`}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label class="form-label">Interval</label>
+                            <div class="form-value">{selectedStrategy.intervalTime} seconds</div>
+                        </div>
+                        <div class="form-group half-width">
+                            <label class="form-label">Slippage</label>
+                            <div class="form-value">{(selectedStrategy.slippage / 100).toFixed(2)}%</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <div class="form-value">
+                            <span class="status-badge status-{selectedStrategy.status.toLowerCase()}">
+                                {selectedStrategy.status}
+                            </span>
+                        </div>
+                    </div>
+
+                    {#if selectedStrategy.txHash}
+                        <div class="form-group">
+                            <label class="form-label">Executed Transaction</label>
+                            <div class="tx-hash-container">
+                                <div class="tx-hash clickable" 
+                                     on:click={() => copyToClipboard(selectedStrategy?.txHash || '', 'transaction')}
+                                     title="Click to copy transaction hash">
+                                    <span class="tx-hash-text">{selectedStrategy.txHash}</span>
+                                    <a href={`${txLink(selectedStrategy.txHash)}`}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="tx-link"
+                                       title="View on Solscan">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                            <polyline points="15 3 21 3 21 9"></polyline>
+                                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                                        </svg>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    {#if showUpdateDialog && strategyToUpdate}
+        <div class="dialog-overlay" on:click|self={closeUpdateDialog}>
+            <div class="dialog">
+                <div class="dialog-header">
+                    <h2>Update Strategy</h2>
+                    <button class="close-button" on:click={closeUpdateDialog}>×</button>
+                </div>
+                <div class="dialog-content">
+                    <form on:submit|preventDefault={handleUpdate}>
+                        <!-- Strategy Type (Read-only) -->
+                        <div class="form-group">
+                            <label for="strategyType" class="form-label disabled">Strategy Type</label>
+                            <div class="form-value readonly">{strategyType}</div>
+                        </div>
+
+                        <!-- Account (Read-only) -->
+                        <div class="form-group">
+                            <label for="account" class="form-label disabled">Account</label>
+                            <div class="form-value readonly">
+                                {accounts.find(acc => acc.name.toString() === selectedAccountId)?.name || 'Unknown Account'}
+                            </div>
+                        </div>
+
+                        <!-- Token (Read-only) -->
+                        <div class="form-group">
+                            <label for="token" class="form-label disabled">Token</label>
+                            <div class="form-value readonly">
+                                {selectedToken ? `${selectedToken.name} (${selectedToken.symbol})` : 'Unknown Token'}
+                            </div>
+                        </div>
+
+                        <!-- Editable fields -->
+                        <div class="form-group">
+                            <label for="price">Price (SOL)</label>
+                            <input
+                                type="number"
+                                id="price"
+                                bind:value={price}
+                                step="any"
+                                min="0"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="amount">Amount ({strategyType === "Buy" ? "SOL" : selectedToken?.symbol || 'Tokens'})</label>
+                            <input
+                                type="number"
+                                id="amount"
+                                bind:value={amount}
+                                step="any"
+                                min="0"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="interval">Interval (seconds)</label>
+                            <input
+                                type="number"
+                                id="interval"
+                                bind:value={intervalTime}
+                                min="1"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="slippage">Slippage (%)</label>
+                            <input
+                                type="number"
+                                id="slippage"
+                                bind:value={slippage}
+                                step="0.1"
+                                min="0"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="prioritizationFee">Prioritization Fee (microLamports)</label>
+                            <input
+                                type="number"
+                                id="prioritizationFee"
+                                bind:value={prioritizationFee}
+                                min="0"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        {#if error}
+                            <div class="error-message">{error}</div>
+                        {/if}
+
+                        <div class="dialog-actions">
+                            <button
+                                type="button"
+                                class="button secondary"
+                                on:click={closeUpdateDialog}
+                                disabled={isLoading}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                class="button primary"
+                                disabled={isLoading}
+                            >
+                                {isLoading ? 'Updating...' : 'Update Strategy'}
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -1534,7 +1957,7 @@
 
     .form-row {
         display: flex;
-        gap: 1rem;
+        gap: 0.75rem;
         margin-bottom: 0.75rem;
         width: 100%;
     }
@@ -1587,5 +2010,412 @@
         .notification-message {
             color: #f3f4f6;
         }
+    }
+
+    .account-cell {
+        font-family: monospace;
+        font-size: 0.9rem;
+    }
+
+    .account-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .account-name {
+        font-weight: 500;
+        color: #374151;
+    }
+
+    .account-address {
+        font-size: 0.8rem;
+        color: #666;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .account-name {
+            color: #e5e7eb;
+        }
+
+        .account-address {
+            color: #9ca3af;
+        }
+    }
+
+    .clickable {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .clickable:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .clickable:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+    }
+
+    .info-button {
+        color: #3b82f6;
+    }
+
+    .info-button:hover {
+        background: rgba(59, 130, 246, 0.1);
+        color: #2563eb;
+    }
+
+    .details-dialog {
+        max-width: 800px;
+        width: 90%;
+    }
+
+    .details-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        padding: 1.5rem;
+    }
+
+    .detail-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .detail-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: 500;
+    }
+
+    .detail-value {
+        font-size: 1rem;
+        color: #111827;
+        font-weight: 500;
+    }
+
+    .detail-subtext {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: normal;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .detail-label {
+            color: #9ca3af;
+        }
+
+        .detail-value {
+            color: #f3f4f6;
+        }
+
+        .detail-subtext {
+            color: #9ca3af;
+        }
+
+        .info-button {
+            color: #60a5fa;
+        }
+
+        .info-button:hover {
+            background: rgba(96, 165, 250, 0.1);
+            color: #93c5fd;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .details-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .full-address {
+        font-family: monospace;
+        font-size: 0.85rem;
+        word-break: break-all;
+        padding: 0.375rem;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 0.375rem;
+        margin-top: 0.125rem;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .full-address {
+            background: rgba(255, 255, 255, 0.05);
+        }
+    }
+
+    .form-group {
+        margin-bottom: 0.75rem;
+    }
+
+    .form-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 0.125rem;
+    }
+
+    .form-value {
+        font-size: 1rem;
+        color: #111827;
+        padding: 0.125rem 0;
+    }
+
+    .full-address {
+        font-family: monospace;
+        font-size: 0.85rem;
+        word-break: break-all;
+        padding: 0.375rem;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 0.375rem;
+        margin-top: 0.125rem;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .form-label {
+            color: #9ca3af;
+        }
+
+        .form-value {
+            color: #f3f4f6;
+        }
+
+        .full-address {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+    }
+
+    .dialog-content {
+        padding: 0.75rem;
+    }
+
+    .details-dialog {
+        max-width: 600px;
+        width: 90%;
+        background: white;
+        border-radius: 0.75rem;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .details-dialog {
+            background: #1f2937;
+        }
+    }
+
+    .tx-hash-container {
+        margin-top: 0.25rem;
+        width: 100%;
+    }
+
+    .tx-hash {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        background: rgba(0, 0, 0, 0.08);
+        border-radius: 0.375rem;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        gap: 0.75rem;
+    }
+
+    .tx-hash-text {
+        color: #1f2937;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        min-width: 0;
+        letter-spacing: 0.02em;
+    }
+
+    .tx-link {
+        color: #3b82f6;
+        text-decoration: none;
+        transition: color 0.2s;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .tx-hash {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .tx-hash-text {
+            color: #e5e7eb;
+        }
+    }
+
+    .edit-button {
+        color: #0ea5e9;  /* Sky blue color */
+        margin: 0 0.5rem;
+    }
+
+    .edit-button:hover {
+        background: rgba(14, 165, 233, 0.1);
+        color: #0284c7;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .edit-button {
+            color: #2857b8;
+        }
+
+        .edit-button:hover {
+            background: rgba(56, 189, 248, 0.1);
+            color: #7dd3fc;
+        }
+    }
+
+    .form-label.disabled {
+        color: #9ca3af;
+    }
+
+    .form-value.readonly {
+        background-color: rgba(0, 0, 0, 0.05);
+        padding: 0.5rem;
+        border-radius: 0.375rem;
+        color: #6b7280;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .form-label.disabled {
+            color: #9ca3af;
+        }
+
+        .form-value.readonly {
+            background-color: rgba(255, 255, 255, 0.05);
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            color: #9ca3af;
+        }
+    }
+
+    .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding: 0 1rem 1rem;
+    }
+
+    .button {
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 500;
+        font-size: 1rem;
+        transition: all 0.2s;
+        cursor: pointer;
+        border: none;
+        min-width: 120px;
+    }
+
+    .button.primary {
+        background-color: #38bdf8;
+        color: white;
+    }
+
+    .button.primary:hover {
+        background-color: #0ea5e9;
+    }
+
+    .button.primary:disabled {
+        background-color: #0ea5e9;
+        opacity: 0.5;
+    }
+
+    .button.secondary {
+        background-color: #e5e7eb;
+        color: #374151;
+    }
+
+    .button.secondary:hover {
+        background-color: #d1d5db;
+    }
+
+    .button.secondary:disabled {
+        background-color: #f3f4f6;
+        color: #9ca3af;
+        cursor: not-allowed;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .button.primary {
+            background-color: #2857b8;
+            /* background-color: #38bdf8; */
+        }
+
+        .button.primary:hover {
+            background-color: #0ea5e9;
+        }
+
+        .button.primary:disabled {
+            background-color: #0ea5e9;
+            opacity: 0.5;
+        }
+
+        .button.secondary {
+            background-color: #374151;
+            color: #e5e7eb;
+        }
+
+        .button.secondary:hover {
+            background-color: #4b5563;
+        }
+
+        .button.secondary:disabled {
+            background-color: #374151;
+            color: #9ca3af;
+            opacity: 0.5;
+        }
+    }
+
+    .loading-balance {
+        color: #6b7280;
+        font-style: italic;
+        font-size: 0.875rem;
+    }
+
+    .error-balance {
+        color: #dc2626;
+        font-size: 0.875rem;
+    }
+
+    .token-balance {
+        font-family: monospace;
+        font-size: 0.9rem;
+        color: #374151;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .loading-balance {
+            color: #9ca3af;
+        }
+        
+        .error-balance {
+            color: #ef4444;
+        }
+        
+        .token-balance {
+            color: #e5e7eb;
+        }
+    }
+
+    .balance-wrapper {
+        display: inline-flex;
+        align-items: center;
     }
 </style>

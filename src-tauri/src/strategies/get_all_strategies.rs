@@ -51,8 +51,10 @@ pub async fn get_all_strategies_with_full_information(
             s.created_at,
             t.logo_uri,
             t.decimals,
+            t.symbol as token_symbol,
             t.name as token_name,
-            a.name as account_name
+            a.name as account_name,
+            a.public_key as account_public_key
         FROM strategies s
         LEFT JOIN tokens t ON s.token_address = t.address
         LEFT JOIN accounts a ON s.account_private_key = a.private_key",
