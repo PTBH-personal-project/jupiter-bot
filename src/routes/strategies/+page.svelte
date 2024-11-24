@@ -38,7 +38,7 @@
     let tokens: TokenInfo[] = [];
 
     let isTokenDropdownOpen = false;
-    let selectedToken: TokenInfo | null = null;
+    let selectedToken: Omit<TokenInfo, 'totalSupply' | 'uri'> | null = null;
 
     let selectedTokenPrice: number | null = null;
 
@@ -48,6 +48,10 @@
     // Add these new state variables
     let showDetailsDialog = false;
     let selectedStrategy: StrategyWithFullInformation | null = null;
+
+    // Add new state variables
+    let showUpdateDialog = false;
+    let strategyToUpdate: StrategyWithFullInformation | null = null;
 
     async function fetchTokenPrice(tokenAddress: string, tokenDecimals: number) {
         try {
@@ -280,6 +284,89 @@
         showDetailsDialog = false;
         selectedStrategy = null;
     }
+
+    function showUpdateStrategy(strategy: StrategyWithFullInformation) {
+        strategyToUpdate = strategy;
+        // Pre-fill the form fields with current strategy values
+        strategyType = strategy.strategyType;
+        intervalTime = strategy.intervalTime;
+        price = strategy.price / Math.pow(10, 9);  // Convert from lamports to SOL
+        amount = strategy.strategyType === "Buy" 
+            ? strategy.amount / Math.pow(10, 9)  // Convert from lamports to SOL
+            : strategy.amount / Math.pow(10, strategy.decimals);  // Convert using token decimals
+        prioritizationFee = strategy.prioritizationFee;
+        slippage = strategy.slippage / 100;
+        selectedAccountId = strategy.accountName.toString();
+        tokenAddress = strategy.tokenAddress;
+        selectedToken = {
+            address: strategy.tokenAddress,
+            name: strategy.tokenName,
+            decimals: strategy.decimals,
+            logoUri: "",
+            symbol: strategy.tokenSymbol
+        };
+        showUpdateDialog = true;
+    }
+
+    function closeUpdateDialog() {
+        showUpdateDialog = false;
+        strategyToUpdate = null;
+        resetForm();
+    }
+
+    async function handleUpdate() {
+        isLoading = true;
+        error = null;
+
+        try {
+            if (!strategyToUpdate) {
+                throw new Error("No strategy selected for update");
+            }
+
+            const selectedAccount = accounts.find((acc) => acc.name.toString() === selectedAccountId);
+            if (!selectedAccount) {
+                throw new Error("Please select an account");
+            }
+            if (!selectedToken) {
+                throw new Error("Please select a token");
+            }
+
+            await invoke("update_strategy", {
+                strategyId: strategyToUpdate.id,
+                intervalTime,
+                price: Math.trunc(price * Math.pow(10, 9)),
+                amount: strategyType === "Buy"
+                    ? Math.trunc(amount * Math.pow(10, 9))
+                    : Math.trunc(amount * Math.pow(10, selectedToken.decimals)),
+                prioritizationFee,
+                slippage: Math.trunc(slippage * 100),
+            });
+
+            await loadStrategies();
+            showNotification("Strategy updated successfully");
+            closeUpdateDialog();
+        } catch (err) {
+            console.error("Error updating strategy:", err);
+            error = err instanceof Error ? err.message : String(err);
+            showNotification("Failed to update strategy: " + err, true);
+        } finally {
+            isLoading = false;
+        }
+    }
+
+    // Add this new function near other async functions
+    async function getTokenBalance(tokenAddress: string, accountPublicKey: string, decimals: number): Promise<number | null> {
+        try {
+            const balance = await invoke("get_account_balance", { 
+                publicKey: accountPublicKey, 
+                tokenAddress,
+            });
+            return Number(balance) / Math.pow(10, decimals);
+        } catch (err) {
+            console.error("Error fetching token balance:", err);
+            return null;
+        }
+    }
 </script>
 
 <main class="container">
@@ -303,6 +390,7 @@
                         <th>Type</th>
                         <th>Account</th>
                         <th>Token</th>
+                        <th>Balance</th>
                         <th>Price</th>
                         <th>Amount</th>
                         <th>Interval</th>
@@ -358,6 +446,19 @@
                                     {shortenAddress(strategy.tokenAddress)}
                                 {/if}
                             </td>
+                            <td>
+                                {#await getTokenBalance(strategy.tokenAddress, strategy.accountPublicKey, strategy.decimals)}
+                                    <span class="loading-balance">Loading...</span>
+                                {:then balance}
+                                    {#if balance !== null}
+                                        <span class="token-balance">
+                                            {balance.toFixed(strategy.decimals)} {strategy.tokenSymbol}
+                                        </span>
+                                    {:else}
+                                        <span class="error-balance">Error</span>
+                                    {/if}
+                                {/await}
+                            </td>
                             <td>{(strategy.price / Math.pow(10, 9)).toFixed(9)}</td>
                             <td>
                                 {strategy.strategyType === "Buy"
@@ -409,6 +510,28 @@
                                                 <circle cx="12" cy="12" r="10" />
                                                 <line x1="12" y1="16" x2="12" y2="12" />
                                                 <line x1="12" y1="8" x2="12" y2="8" />
+                                            </svg>
+                                        </button>
+                                    </Tooltip>
+                                    <Tooltip text="Edit strategy">
+                                        <button
+                                            class="icon-button edit-button"
+                                            on:click={() => showUpdateStrategy(strategy)}
+                                            title="Edit Strategy"
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="2"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                            >
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                                             </svg>
                                         </button>
                                     </Tooltip>
@@ -816,6 +939,128 @@
                             </div>
                         </div>
                     {/if}
+                </div>
+            </div>
+        </div>
+    {/if}
+
+    {#if showUpdateDialog && strategyToUpdate}
+        <div class="dialog-overlay" on:click|self={closeUpdateDialog}>
+            <div class="dialog">
+                <div class="dialog-header">
+                    <h2>Update Strategy</h2>
+                    <button class="close-button" on:click={closeUpdateDialog}>×</button>
+                </div>
+                <div class="dialog-content">
+                    <form on:submit|preventDefault={handleUpdate}>
+                        <!-- Strategy Type (Read-only) -->
+                        <div class="form-group">
+                            <label for="strategyType" class="form-label disabled">Strategy Type</label>
+                            <div class="form-value readonly">{strategyType}</div>
+                        </div>
+
+                        <!-- Account (Read-only) -->
+                        <div class="form-group">
+                            <label for="account" class="form-label disabled">Account</label>
+                            <div class="form-value readonly">
+                                {accounts.find(acc => acc.name.toString() === selectedAccountId)?.name || 'Unknown Account'}
+                            </div>
+                        </div>
+
+                        <!-- Token (Read-only) -->
+                        <div class="form-group">
+                            <label for="token" class="form-label disabled">Token</label>
+                            <div class="form-value readonly">
+                                {selectedToken ? `${selectedToken.name} (${selectedToken.symbol})` : 'Unknown Token'}
+                            </div>
+                        </div>
+
+                        <!-- Editable fields -->
+                        <div class="form-group">
+                            <label for="price">Price (SOL)</label>
+                            <input
+                                type="number"
+                                id="price"
+                                bind:value={price}
+                                step="any"
+                                min="0"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="amount">Amount ({strategyType === "Buy" ? "SOL" : selectedToken?.symbol || 'Tokens'})</label>
+                            <input
+                                type="number"
+                                id="amount"
+                                bind:value={amount}
+                                step="any"
+                                min="0"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="interval">Interval (seconds)</label>
+                            <input
+                                type="number"
+                                id="interval"
+                                bind:value={intervalTime}
+                                min="1"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="slippage">Slippage (%)</label>
+                            <input
+                                type="number"
+                                id="slippage"
+                                bind:value={slippage}
+                                step="0.1"
+                                min="0"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="prioritizationFee">Prioritization Fee (microLamports)</label>
+                            <input
+                                type="number"
+                                id="prioritizationFee"
+                                bind:value={prioritizationFee}
+                                min="0"
+                                class="form-input"
+                                disabled={isLoading}
+                            />
+                        </div>
+
+                        {#if error}
+                            <div class="error-message">{error}</div>
+                        {/if}
+
+                        <div class="dialog-actions">
+                            <button
+                                type="button"
+                                class="button secondary"
+                                on:click={closeUpdateDialog}
+                                disabled={isLoading}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                class="button primary"
+                                disabled={isLoading}
+                            >
+                                {isLoading ? 'Updating...' : 'Update Strategy'}
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
@@ -2005,6 +2250,161 @@
         }
 
         .tx-hash-text {
+            color: #e5e7eb;
+        }
+    }
+
+    .edit-button {
+        color: #0ea5e9;  /* Sky blue color */
+        margin: 0 0.5rem;
+    }
+
+    .edit-button:hover {
+        background: rgba(14, 165, 233, 0.1);
+        color: #0284c7;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .edit-button {
+            color: #2857b8;
+        }
+
+        .edit-button:hover {
+            background: rgba(56, 189, 248, 0.1);
+            color: #7dd3fc;
+        }
+    }
+
+    .form-label.disabled {
+        color: #9ca3af;
+    }
+
+    .form-value.readonly {
+        background-color: rgba(0, 0, 0, 0.05);
+        padding: 0.5rem;
+        border-radius: 0.375rem;
+        color: #6b7280;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .form-label.disabled {
+            color: #9ca3af;
+        }
+
+        .form-value.readonly {
+            background-color: rgba(255, 255, 255, 0.05);
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            color: #9ca3af;
+        }
+    }
+
+    .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        margin-top: 2rem;
+        padding: 0 1rem 1rem;
+    }
+
+    .button {
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 500;
+        font-size: 1rem;
+        transition: all 0.2s;
+        cursor: pointer;
+        border: none;
+        min-width: 120px;
+    }
+
+    .button.primary {
+        background-color: #38bdf8;
+        color: white;
+    }
+
+    .button.primary:hover {
+        background-color: #0ea5e9;
+    }
+
+    .button.primary:disabled {
+        background-color: #0ea5e9;
+        opacity: 0.5;
+    }
+
+    .button.secondary {
+        background-color: #e5e7eb;
+        color: #374151;
+    }
+
+    .button.secondary:hover {
+        background-color: #d1d5db;
+    }
+
+    .button.secondary:disabled {
+        background-color: #f3f4f6;
+        color: #9ca3af;
+        cursor: not-allowed;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .button.primary {
+            background-color: #2857b8;
+            /* background-color: #38bdf8; */
+        }
+
+        .button.primary:hover {
+            background-color: #0ea5e9;
+        }
+
+        .button.primary:disabled {
+            background-color: #0ea5e9;
+            opacity: 0.5;
+        }
+
+        .button.secondary {
+            background-color: #374151;
+            color: #e5e7eb;
+        }
+
+        .button.secondary:hover {
+            background-color: #4b5563;
+        }
+
+        .button.secondary:disabled {
+            background-color: #374151;
+            color: #9ca3af;
+            opacity: 0.5;
+        }
+    }
+
+    .loading-balance {
+        color: #6b7280;
+        font-style: italic;
+        font-size: 0.875rem;
+    }
+
+    .error-balance {
+        color: #dc2626;
+        font-size: 0.875rem;
+    }
+
+    .token-balance {
+        font-family: monospace;
+        font-size: 0.9rem;
+        color: #374151;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .loading-balance {
+            color: #9ca3af;
+        }
+        
+        .error-balance {
+            color: #ef4444;
+        }
+        
+        .token-balance {
             color: #e5e7eb;
         }
     }

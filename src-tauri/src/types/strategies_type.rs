@@ -66,6 +66,7 @@ pub struct StrategyWithFullInformation {
     pub created_at: Option<String>,
     pub logo_uri: String,
     pub decimals: i64,
+    pub token_symbol: String,
     pub token_name: String,
     pub account_name: String,
     pub account_public_key: String,
@@ -222,8 +223,9 @@ impl StrategyWithFullInformation {
 
         match signature {
             Ok(sig) => {
-                sqlx::query("UPDATE strategies SET tx_hash = ?, status = 'Executed' WHERE id = ?")
+                sqlx::query("UPDATE strategies SET tx_hash = ?, status = 'Executed', matched_price = ? WHERE id = ?")
                     .bind(sig.to_string())
+                    .bind(price as i64)
                     .bind(self.id)
                     .execute(db)
                     .await
@@ -323,8 +325,9 @@ impl StrategyWithFullInformation {
 
         match signature {
             Ok(sig) => {
-                sqlx::query("UPDATE strategies SET tx_hash = ?, status = 'Executed' WHERE id = ?")
+                sqlx::query("UPDATE strategies SET tx_hash = ?, status = 'Executed', matched_price = ? WHERE id = ?")
                     .bind(sig.to_string())
+                    .bind(price as i64)
                     .bind(self.id)
                     .execute(db)
                     .await

@@ -32,4 +32,5 @@ export type StrategyWithFullInformation = {
     tokenName: string;
     accountName: string;
     accountPublicKey: string;
+    tokenSymbol: string;
 };
