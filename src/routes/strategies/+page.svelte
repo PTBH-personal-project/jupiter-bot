@@ -447,17 +447,22 @@
                                 {/if}
                             </td>
                             <td>
-                                {#await getTokenBalance(strategy.tokenAddress, strategy.accountPublicKey, strategy.decimals)}
-                                    <span class="loading-balance">Loading...</span>
-                                {:then balance}
-                                    {#if balance !== null}
-                                        <span class="token-balance">
-                                            {balance.toFixed(strategy.decimals)} {strategy.tokenSymbol}
-                                        </span>
-                                    {:else}
-                                        <span class="error-balance">Error</span>
-                                    {/if}
-                                {/await}
+                                {#key Date.now()}
+                                    {#await getTokenBalance(strategy.tokenAddress, strategy.accountPublicKey, strategy.decimals)}
+                                        <span class="loading-balance">Loading...</span>
+                                    {:then balance}
+                                        {#if balance !== null}
+                                            <span 
+                                                class="token-balance clickable" 
+                                                on:click={() => getTokenBalance(strategy.tokenAddress, strategy.accountPublicKey, strategy.decimals)}
+                                            >
+                                                {balance.toFixed(strategy.decimals)} {strategy.tokenSymbol}
+                                            </span>
+                                        {:else}
+                                            <span class="error-balance">Error</span>
+                                        {/if}
+                                    {/await}
+                                {/key}
                             </td>
                             <td>{(strategy.price / Math.pow(10, 9)).toFixed(9)}</td>
                             <td>
@@ -2407,5 +2412,10 @@
         .token-balance {
             color: #e5e7eb;
         }
+    }
+
+    .balance-wrapper {
+        display: inline-flex;
+        align-items: center;
     }
 </style>
